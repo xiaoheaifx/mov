@@ -164,7 +164,7 @@ function saveLocalDB() {
 // Database helper functions supporting both modes
 export async function getCollection<T extends keyof LocalDBStructure>(collection: T): Promise<LocalDBStructure[T]> {
   await initBlobs();
-  if (isNetlify() && getStore) {
+  if (isNetlify() && getStore && process.env.SITE_ID) {
     try {
       const store = getStore({ name: 'xiaohe-movies', siteID: process.env.SITE_ID });
       const data = await store.get(collection, { type: 'json' });
@@ -188,7 +188,7 @@ export async function setCollection<T extends keyof LocalDBStructure>(collection
   localDBCache[collection] = data;
   
   await initBlobs();
-  if (isNetlify() && getStore) {
+  if (isNetlify() && getStore && process.env.SITE_ID) {
     try {
       const store = getStore({ name: 'xiaohe-movies', siteID: process.env.SITE_ID });
       await store.setJSON(collection, data);
@@ -198,9 +198,11 @@ export async function setCollection<T extends keyof LocalDBStructure>(collection
     }
   }
   
-  initLocalDB(); // ensure directories
-  localDBCache[collection] = data;
-  saveLocalDB();
+  // Skip local file save on Netlify
+  if (!isNetlify()) {
+    initLocalDB();
+    saveLocalDB();
+  }
 }
 
 // Seeding standard initial DB setup on module load
