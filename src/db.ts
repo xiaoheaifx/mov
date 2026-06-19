@@ -98,7 +98,13 @@ let localDBCache: LocalDBStructure = {
 
 // Check if running on Netlify using available environment variables
 function isNetlify(): boolean {
-  return !!(process.env.NETLIFY || process.env.NETLIFY_LOCAL || process.env.NETLIFY_BLOBS_TOKEN);
+  return !!(
+    process.env.NETLIFY || 
+    process.env.NETLIFY_LOCAL || 
+    process.env.NETLIFY_BLOBS_TOKEN ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.LAMBDA_TASK_ROOT
+  );
 }
 
 // Ensure data folder and file exist for local fallback
@@ -108,9 +114,14 @@ function initLocalDB() {
     return;
   }
 
-  const dir = path.dirname(LOCAL_DB_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  try {
+    const dir = path.dirname(LOCAL_DB_PATH);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  } catch (e) {
+    // Silently fail on read-only filesystems
+    return;
   }
   
   // Seed the default administrative password hash if env variable doesn't provide it
@@ -206,4 +217,8 @@ export async function setCollection<T extends keyof LocalDBStructure>(collection
 }
 
 // Seeding standard initial DB setup on module load
-initLocalDB();
+try {
+  initLocalDB();
+} catch (e) {
+  // Silently fail on read-only filesystems (Netlify)
+}
