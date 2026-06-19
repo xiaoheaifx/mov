@@ -23,6 +23,19 @@ async function initBlobs() {
   }
 }
 
+// Check if running on Netlify using available environment variables
+function isNetlify(): boolean {
+  return !!(
+    process.env.NETLIFY || 
+    process.env.NETLIFY_LOCAL || 
+    process.env.NETLIFY_BLOBS_TOKEN ||
+    process.env.AWS_LAMBDA_FUNCTION_NAME ||
+    process.env.LAMBDA_TASK_ROOT ||
+    process.env.AWS_LAMBDA_FUNCTION_VERSION ||
+    process.env.AWS_EXECUTION_ENV
+  );
+}
+
 const LOCAL_DB_PATH = path.join(process.cwd(), 'data', 'db.json');
 
 // Memory cache + local file-based database for fallback / local development
@@ -96,17 +109,6 @@ let localDBCache: LocalDBStructure = {
   movies: INITIAL_MOVIES
 };
 
-// Check if running on Netlify using available environment variables
-function isNetlify(): boolean {
-  return !!(
-    process.env.NETLIFY || 
-    process.env.NETLIFY_LOCAL || 
-    process.env.NETLIFY_BLOBS_TOKEN ||
-    process.env.AWS_LAMBDA_FUNCTION_NAME ||
-    process.env.LAMBDA_TASK_ROOT
-  );
-}
-
 // Ensure data folder and file exist for local fallback
 function initLocalDB() {
   // Skip local file operations on Netlify (read-only filesystem)
@@ -168,7 +170,7 @@ function saveLocalDB() {
     }
     fs.writeFileSync(LOCAL_DB_PATH, JSON.stringify(localDBCache, null, 2), 'utf-8');
   } catch (e) {
-    console.error('Failed to save database file locally:', e);
+    // Silently fail on read-only filesystems (Netlify)
   }
 }
 
