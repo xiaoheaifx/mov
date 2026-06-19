@@ -1,0 +1,6 @@
+{
+  "name": "xiaohe影视",
+  "description": "A clean, advertisement-free movie platform featuring role-based streaming access control, aspect ratio adjustments in playback, and custom streamer dashboards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

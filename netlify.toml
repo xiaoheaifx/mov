@@ -1,0 +1,22 @@
+# Netlify deployment configuration for xiaohe影视
+# This allows Netlify to bundle the React SPA and redirect all assets correctly.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# Redirect all paths back to index.html to allow client routing to function safely.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Allow TMDB image URLs to pass through (external images)
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+
+[template.environment]
+  ADMIN_USERNAME = "admin"
+  ADMIN_PASSWORD_HASH = ""

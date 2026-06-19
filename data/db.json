@@ -1,0 +1,66 @@
+{
+  "users": {},
+  "admins": {
+    "admin": {
+      "username": "admin",
+      "passwordHash": "$2b$10$PTJNjtpg4cKWO2Ye0DkvLezMy1sUYrJ8nmtdTQuIPJmFNmgs9T22m",
+      "role": "admin",
+      "createdAt": "2026-06-19T04:00:47.921Z"
+    }
+  },
+  "sessions": {},
+  "movies": {
+    "1": {
+      "id": "1",
+      "title": "大雄兔 (Big Buck Bunny)",
+      "coverUrl": "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&q=80",
+      "description": "一只巨大的兔子遭到了三只无赖地松鼠的挑衅，它决定用智慧也一些巧妙的陷阱做出反击。这是一部经典的开源三维动画电影。",
+      "genre": "动画 / 喜剧",
+      "duration": "10 分钟",
+      "streamUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
+      "streamValid": true,
+      "streamCheckTime": "2026-06-05T09:03:30.390Z",
+      "createdAt": "2026-06-05T09:03:30.391Z",
+      "updatedAt": "2026-06-05T09:03:30.391Z"
+    },
+    "2": {
+      "id": "2",
+      "title": "钢铁之泪 (Tears of Steel)",
+      "coverUrl": "https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?w=800&q=80",
+      "description": "发生在阿姆斯特丹的一部科幻电影。一群科学工作者试图通过旧技术拯救世界，防止巨型机器人的入侵，包含令人炫目的粒子特效。",
+      "genre": "科幻 / 动作",
+      "duration": "12 分钟",
+      "streamUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+      "streamValid": true,
+      "streamCheckTime": "2026-06-05T09:03:30.391Z",
+      "createdAt": "2026-06-05T09:03:30.391Z",
+      "updatedAt": "2026-06-05T09:03:30.391Z"
+    },
+    "3": {
+      "id": "3",
+      "title": "辛特尔 (Sintel)",
+      "coverUrl": "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&q=80",
+      "description": "一个年轻的女孩辛特尔收养了一只受伤的小龙，并成了形影不离的好友。然而小龙某天被一只恶龙抓走，她踏上了漫长的寻找与救赎旅程。",
+      "genre": "奇幻 / 冒险",
+      "duration": "15 分钟",
+      "streamUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
+      "streamValid": true,
+      "streamCheckTime": "2026-06-05T09:03:30.391Z",
+      "createdAt": "2026-06-05T09:03:30.391Z",
+      "updatedAt": "2026-06-05T09:03:30.391Z"
+    },
+    "4": {
+      "id": "4",
+      "title": "测试 m3u8 直播源 (M3U8 Live)",
+      "coverUrl": "https://images.unsplash.com/photo-1542204172-e7052809f852?w=800&q=80",
+      "description": "一个稳定的 HTTP Live Streaming (HLS) 视频流，包含点播与直播源测试，用于演示网站的 m3u8 兼容播放器和自适应流媒体功能。",
+      "genre": "演示 / 视频流",
+      "duration": "24小时直播",
+      "streamUrl": "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+      "streamValid": true,
+      "streamCheckTime": "2026-06-05T09:03:30.391Z",
+      "createdAt": "2026-06-05T09:03:30.391Z",
+      "updatedAt": "2026-06-05T09:03:30.391Z"
+    }
+  }
+}
