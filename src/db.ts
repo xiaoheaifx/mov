@@ -217,8 +217,5 @@ export async function setCollection<T extends keyof LocalDBStructure>(collection
 }
 
 // Seeding standard initial DB setup on module load
-try {
-  initLocalDB();
-} catch (e) {
-  // Silently fail on read-only filesystems (Netlify)
-}
+// Completely skip on serverless environments to avoid filesystem errors
+// Database will be lazily initialized when getCollection/setCollection is called
