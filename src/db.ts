@@ -96,20 +96,31 @@ let localDBCache: LocalDBStructure = {
   movies: INITIAL_MOVIES
 };
 
+// Check if running on Netlify using available environment variables
+function isNetlify(): boolean {
+  return !!(process.env.NETLIFY || process.env.NETLIFY_LOCAL || process.env.NETLIFY_BLOBS_TOKEN);
+}
+
 // Ensure data folder and file exist for local fallback
 function initLocalDB() {
+  // Skip local file operations on Netlify (read-only filesystem)
+  if (isNetlify()) {
+    return;
+  }
+
   const dir = path.dirname(LOCAL_DB_PATH);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
   
   // Seed the default administrative password hash if env variable doesn't provide it
-  const adminUsername = process.env.ADMIN_USERNAME || 'admin';
+  const adminUsername = process.env.ADMIN_USERNAME || 'xiaohe';
   let adminHash = process.env.ADMIN_PASSWORD_HASH;
   if (!adminHash) {
-    // Generate bcrypt hash for 'admin123' as standard default
+    // Support ADMIN_PASSWORD (plain text) or fallback to default
+    const plainPassword = process.env.ADMIN_PASSWORD || 'xiaohe@5200';
     const salt = bcrypt.genSaltSync(10);
-    adminHash = bcrypt.hashSync('admin123', salt);
+    adminHash = bcrypt.hashSync(plainPassword, salt);
   }
   
   if (fs.existsSync(LOCAL_DB_PATH)) {
@@ -148,11 +159,6 @@ function saveLocalDB() {
   } catch (e) {
     console.error('Failed to save database file locally:', e);
   }
-}
-
-// Check if running on Netlify using available environment variables
-function isNetlify(): boolean {
-  return !!(process.env.NETLIFY || process.env.NETLIFY_LOCAL || process.env.NETLIFY_BLOBS_TOKEN);
 }
 
 // Database helper functions supporting both modes
