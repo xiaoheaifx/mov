@@ -75,7 +75,7 @@ async function adminAuthMiddleware(event: HandlerEvent): Promise<{ error?: any; 
 
 // Main handler
 export const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
-  const path = event.path.replace(/^\/\.netlify\/functions\/api/, '');
+  const path = event.path.replace(/^\/\.netlify\/functions\/api/, '').replace(/^\/api/, '');
   const method = event.httpMethod;
   const cookies = parseCookies(event.headers.cookie);
   
