@@ -9,10 +9,10 @@ export interface Movie {
   coverUrl: string;
   description: string;
   genre: string;
-  duration: string; // e.g., "120 min"
+  duration: string;
   streamUrl: string;
-  streamValid?: boolean | null; // true, false, or null if untested
-  streamCheckTime?: string | null; // ISO timestamp
+  streamValid?: boolean | null;
+  streamCheckTime?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -109,6 +109,7 @@ export interface TVBoxSite {
   name: string;
   type: number;
   api: string;
+  detail?: string;
   searchable?: number;
   quickSearch?: number;
   filterable?: number;
@@ -183,4 +184,51 @@ export interface PosterSearchResponse {
   msg?: string;
   list?: PosterSearchResult[];
   total?: number | string;
+}
+
+export interface VideoSource {
+  id: string;
+  name: string;
+  key: string;
+  api: string;
+  detail?: string;
+  type?: number;
+  searchable?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VideoSourceEpisode {
+  name: string;
+  url: string;
+}
+
+export interface VideoSourcePlayLine {
+  source: string;
+  episodes: VideoSourceEpisode[];
+}
+
+export interface VideoSourcePlayResult {
+  vod_id: string | number;
+  vod_name: string;
+  vod_pic: string;
+  type_name: string;
+  vod_year: string;
+  vod_area: string;
+  vod_remarks: string;
+  vod_content: string;
+  vod_director: string;
+  vod_actor: string;
+  lines: VideoSourcePlayLine[];
+}
+
+export interface VideoSourceSearchItem {
+  vod_id: string | number;
+  vod_name: string;
+  vod_pic: string;
+  type_name: string;
+  vod_remarks: string;
+  vod_year: string;
+  sourceKey: string;
+  sourceName: string;
 }

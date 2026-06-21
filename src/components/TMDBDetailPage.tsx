@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Star, Play, Calendar, Clock, Film, Tv, Users, Globe, DollarSign, Building2, Award, ArrowLeft, Tag, Languages } from 'lucide-react';
-import { TMDBMovie, TMDBMovieDetail } from '../types.js';
+import { Star, Play, Calendar, Clock, Film, Tv, Users, Globe, DollarSign, Building2, Award, ArrowLeft, Tag, Languages, Loader2, MonitorPlay, List } from 'lucide-react';
+import { TMDBMovie, TMDBMovieDetail, VideoSource, VideoSourcePlayLine, VideoSourceEpisode } from '../types.js';
 
 interface TMDBDetailPageProps {
   item: TMDBMovie;
@@ -9,9 +9,38 @@ interface TMDBDetailPageProps {
   onPlay: (item: TMDBMovie) => void;
 }
 
+function parsePlayLines(vodPlayFrom: string, vodPlayUrl: string): VideoSourcePlayLine[] {
+  if (!vodPlayUrl) return [];
+  const sources = vodPlayFrom ? vodPlayFrom.split('$$$') : ['默认线路'];
+  const urlGroups = vodPlayUrl.split('$$$');
+  
+  return sources.map((source, index) => {
+    const urlStr = urlGroups[index] || '';
+    const episodes: VideoSourceEpisode[] = [];
+    
+    urlStr.split('#').forEach(ep => {
+      const parts = ep.split('$');
+      if (parts.length >= 2) {
+        episodes.push({ name: parts[0].trim(), url: parts[1].trim() });
+      }
+    });
+    
+    return { source: source.trim(), episodes };
+  }).filter(line => line.episodes.length > 0);
+}
+
 export default function TMDBDetailPage({ item, getImageUrl, onBack, onPlay }: TMDBDetailPageProps) {
   const [detail, setDetail] = useState<TMDBMovieDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [playLines, setPlayLines] = useState<VideoSourcePlayLine[]>([]);
+  const [selectedLine, setSelectedLine] = useState(0);
+  const [selectedEpisode, setSelectedEpisode] = useState(0);
+  const [currentUrl, setCurrentUrl] = useState<string>('');
+  const [showPlayer, setShowPlayer] = useState(false);
+  const [videoSources, setVideoSources] = useState<VideoSource[]>([]);
+  const [searchingSources, setSearchingSources] = useState(false);
+  const [sourceResults, setSourceResults] = useState<Array<{ sourceName: string; sourceId: string; lines: VideoSourcePlayLine[] }>>([]);
+  const [activeSourceId, setActiveSourceId] = useState<string>('');
 
   useEffect(() => {
     const fetchDetail = async () => {
@@ -32,6 +61,110 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack, onPlay }: TM
     };
     fetchDetail();
   }, [item]);
+
+  // Search video sources when detail is loaded
+  useEffect(() => {
+    if (!detail) return;
+    const title = detail?.title || detail?.name || item.title || item.name || '';
+    if (!title) return;
+    searchVideoSources(title);
+  }, [detail]);
+
+  const searchVideoSources = async (keyword: string) => {
+    setSearchingSources(true);
+    setSourceResults([]);
+    try {
+      // First get all video sources
+      const vsRes = await fetch('/api/video-sources');
+      if (!vsRes.ok) return;
+      const sources: VideoSource[] = await vsRes.json();
+      setVideoSources(sources);
+
+      if (sources.length === 0) return;
+
+      // Search each source for the keyword
+      const results: Array<{ sourceName: string; sourceId: string; lines: VideoSourcePlayLine[] }> = [];
+      
+      for (const source of sources) {
+        try {
+          const searchUrl = `${source.api}?ac=videolist&wd=${encodeURIComponent(keyword)}`;
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 10000);
+          const res = await fetch(searchUrl, { signal: controller.signal });
+          clearTimeout(timeout);
+          
+          if (!res.ok) continue;
+          const data = await res.json();
+          if (data.list && data.list.length > 0) {
+            // Get detail of the first result
+            const firstItem = data.list[0];
+            const vodId = firstItem.vod_id;
+            const detailUrl = source.detail
+              ? `${source.detail}?ac=videolist&ids=${vodId}`
+              : `${source.api}?ac=videolist&ids=${vodId}`;
+            
+            const detailRes = await fetch(detailUrl);
+            if (detailRes.ok) {
+              const detailData = await detailRes.json();
+              if (detailData.list && detailData.list.length > 0) {
+                const vod = detailData.list[0];
+                const lines = parsePlayLines(vod.vod_play_from || '', vod.vod_play_url || '');
+                if (lines.length > 0) {
+                  results.push({
+                    sourceName: source.name,
+                    sourceId: source.id,
+                    lines
+                  });
+                }
+              }
+            }
+          }
+        } catch {
+          // Skip failed sources
+        }
+      }
+
+      setSourceResults(results);
+      if (results.length > 0) {
+        setActiveSourceId(results[0].sourceId);
+        setPlayLines(results[0].lines);
+        setSelectedLine(0);
+        setSelectedEpisode(0);
+      }
+    } catch (e) {
+      console.error('Error searching video sources:', e);
+    } finally {
+      setSearchingSources(false);
+    }
+  };
+
+  const switchSource = (sourceId: string) => {
+    const result = sourceResults.find(r => r.sourceId === sourceId);
+    if (result) {
+      setActiveSourceId(sourceId);
+      setPlayLines(result.lines);
+      setSelectedLine(0);
+      setSelectedEpisode(0);
+      setCurrentUrl('');
+      setShowPlayer(false);
+    }
+  };
+
+  const handlePlayEpisode = (lineIndex: number, epIndex: number) => {
+    setSelectedLine(lineIndex);
+    setSelectedEpisode(epIndex);
+    const url = playLines[lineIndex]?.episodes[epIndex]?.url || '';
+    setCurrentUrl(url);
+    setShowPlayer(true);
+  };
+
+  const handlePlay = () => {
+    if (playLines.length > 0 && playLines[selectedLine].episodes.length > 0) {
+      handlePlayEpisode(selectedLine, 0);
+    } else {
+      onPlay(item);
+    }
+  };
 
   const title = detail?.title || detail?.name || item.title || item.name || '';
   const backdropUrl = getImageUrl(detail?.backdrop_path || item.backdrop_path, 'w1280');
@@ -63,6 +196,9 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack, onPlay }: TM
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
   };
 
+  const isTV = mediaType === 'tv';
+  const currentEpisodes = playLines[selectedLine]?.episodes || [];
+
   return (
     <div className="fixed inset-0 z-50 bg-white dark:bg-slate-950 overflow-y-auto">
       {/* Backdrop header */}
@@ -85,16 +221,34 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack, onPlay }: TM
         {/* Play button overlay */}
         <div className="absolute bottom-6 left-6 z-10">
           <button
-            onClick={() => onPlay(item)}
+            onClick={handlePlay}
             className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-full text-base font-bold transition-colors cursor-pointer shadow-lg shadow-blue-600/30"
           >
-            <Play className="w-5 h-5 fill-white" /> 立即播放
+            <Play className="w-5 h-5 fill-white" /> 
+            {sourceResults.length > 0 ? '播放视频源' : '立即播放'}
           </button>
         </div>
       </div>
 
+      {/* Video Player */}
+      {showPlayer && currentUrl && (
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 relative z-20">
+          <div className="bg-black rounded-2xl overflow-hidden shadow-2xl mb-6">
+            <div className="aspect-video">
+              <iframe
+                src={currentUrl}
+                className="w-full h-full"
+                allowFullScreen
+                allow="autoplay; encrypted-media"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Content */}
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 -mt-32 relative z-10">
+      <div className={`max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 ${showPlayer && currentUrl ? '-mt-0' : '-mt-32'} relative z-10`}>
         <div className="flex flex-col sm:flex-row gap-6 sm:gap-8">
           {/* Poster */}
           <div className="flex-shrink-0 mx-auto sm:mx-0">
@@ -108,8 +262,8 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack, onPlay }: TM
           {/* Info */}
           <div className="flex-1 pt-2 sm:pt-4 text-center sm:text-left">
             <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-3">
-              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${mediaType === 'tv' ? 'bg-purple-600' : 'bg-blue-600'} text-white`}>
-                {mediaType === 'tv' ? '电视剧' : '电影'}
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${isTV ? 'bg-purple-600' : 'bg-blue-600'} text-white`}>
+                {isTV ? '电视剧' : '电影'}
               </span>
               {status && (
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
@@ -171,26 +325,88 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack, onPlay }: TM
                 ))}
               </div>
             )}
+          </div>
+        </div>
 
-            {/* Budget / Revenue */}
-            {(budget || revenue) && (
-              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 mt-3 text-xs text-neutral-500 dark:text-slate-400">
-                {budget && budget > 0 && (
-                  <span className="flex items-center gap-1">
-                    <DollarSign className="w-3.5 h-3.5" />
-                    预算: {formatCurrency(budget)}
-                  </span>
+        {/* Video Source Selector */}
+        {sourceResults.length > 0 && (
+          <div className="mt-6 bg-neutral-50 dark:bg-slate-900 rounded-2xl p-4 border border-neutral-200 dark:border-slate-800">
+            <h3 className="text-sm font-bold text-neutral-900 dark:text-white mb-3 flex items-center gap-2">
+              <MonitorPlay className="w-4 h-4 text-blue-500" /> 可用视频源 ({sourceResults.length})
+            </h3>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {sourceResults.map(sr => (
+                <button
+                  key={sr.sourceId}
+                  onClick={() => switchSource(sr.sourceId)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                    activeSourceId === sr.sourceId
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'bg-white dark:bg-slate-800 text-neutral-700 dark:text-slate-300 hover:bg-neutral-100 dark:hover:bg-slate-700 border border-neutral-200 dark:border-slate-700'
+                  }`}
+                >
+                  {sr.sourceName} ({sr.lines.length}线路)
+                </button>
+              ))}
+            </div>
+
+            {/* Play Lines */}
+            {playLines.length > 0 && (
+              <div className="space-y-3">
+                {/* Line tabs */}
+                {playLines.length > 1 && (
+                  <div className="flex flex-wrap gap-2">
+                    {playLines.map((line, li) => (
+                      <button
+                        key={li}
+                        onClick={() => { setSelectedLine(li); setSelectedEpisode(0); }}
+                        className={`px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                          selectedLine === li
+                            ? 'bg-green-600 text-white'
+                            : 'bg-white dark:bg-slate-800 text-neutral-600 dark:text-slate-400 border border-neutral-200 dark:border-slate-700'
+                        }`}
+                      >
+                        {line.source}
+                      </button>
+                    ))}
+                  </div>
                 )}
-                {revenue && revenue > 0 && (
-                  <span className="flex items-center gap-1">
-                    <Award className="w-3.5 h-3.5" />
-                    票房: {formatCurrency(revenue)}
-                  </span>
-                )}
+
+                {/* Episodes Grid */}
+                <div>
+                  <h4 className="text-xs font-bold text-neutral-500 dark:text-slate-400 mb-2 flex items-center gap-1">
+                    <List className="w-3.5 h-3.5" /> 
+                    {isTV ? '剧集列表' : '播放列表'} ({currentEpisodes.length})
+                  </h4>
+                  <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-1.5">
+                    {currentEpisodes.map((ep, ei) => (
+                      <button
+                        key={ei}
+                        onClick={() => handlePlayEpisode(selectedLine, ei)}
+                        className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer truncate ${
+                          selectedEpisode === ei && showPlayer
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white dark:bg-slate-800 text-neutral-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-700 border border-neutral-200 dark:border-slate-700'
+                        }`}
+                        title={ep.name}
+                      >
+                        {ep.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
           </div>
-        </div>
+        )}
+
+        {/* Searching Sources Indicator */}
+        {searchingSources && (
+          <div className="mt-6 flex items-center justify-center gap-2 text-sm text-neutral-500 dark:text-slate-400">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            正在搜索视频源...
+          </div>
+        )}
 
         {loading ? (
           <div className="flex items-center justify-center py-12">

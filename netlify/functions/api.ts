@@ -595,9 +595,218 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
     }
 
     // ==========================================
+    // Video Source Management API (Admin)
+    // ==========================================
+
+    if (path === '/admin/video-sources' && method === 'GET') {
+      const auth = await adminAuthMiddleware(event);
+      if (auth.error) return auth.error;
+
+      const videoSources = await getCollection('videoSources');
+      return { statusCode: 200, body: JSON.stringify(Object.values(videoSources)) };
+    }
+
+    if (path === '/admin/video-sources' && method === 'POST') {
+      const auth = await adminAuthMiddleware(event);
+      if (auth.error) return auth.error;
+
+      const { name, key, api, detail } = body;
+      if (!name || !key || !api) {
+        return { statusCode: 400, body: JSON.stringify({ error: '名称、Key和API地址为必填项' }) };
+      }
+
+      const id = 'vs_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
+      const videoSources = await getCollection('videoSources');
+
+      const newSource: any = {
+        id,
+        name,
+        key,
+        api,
+        detail: detail || '',
+        type: 0,
+        searchable: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      videoSources[id] = newSource;
+      await setCollection('videoSources', videoSources);
+
+      return { statusCode: 200, body: JSON.stringify({ success: true, videoSource: newSource }) };
+    }
+
+    if (path.match(/^\/admin\/video-sources\/[^/]+$/) && method === 'PUT') {
+      const auth = await adminAuthMiddleware(event);
+      if (auth.error) return auth.error;
+
+      const id = path.split('/')[3];
+      const { name, key, api, detail } = body;
+
+      const videoSources = await getCollection('videoSources');
+      const existing = videoSources[id];
+
+      if (!existing) {
+        return { statusCode: 404, body: JSON.stringify({ error: '视频源未找到' }) };
+      }
+
+      const updated: any = {
+        ...existing,
+        name: name ?? existing.name,
+        key: key ?? existing.key,
+        api: api ?? existing.api,
+        detail: detail ?? existing.detail,
+        updatedAt: new Date().toISOString()
+      };
+
+      videoSources[id] = updated;
+      await setCollection('videoSources', videoSources);
+
+      return { statusCode: 200, body: JSON.stringify({ success: true, videoSource: updated }) };
+    }
+
+    if (path.match(/^\/admin\/video-sources\/[^/]+$/) && method === 'DELETE') {
+      const auth = await adminAuthMiddleware(event);
+      if (auth.error) return auth.error;
+
+      const id = path.split('/')[3];
+      const videoSources = await getCollection('videoSources');
+
+      if (!videoSources[id]) {
+        return { statusCode: 404, body: JSON.stringify({ error: '视频源未找到' }) };
+      }
+
+      delete videoSources[id];
+      await setCollection('videoSources', videoSources);
+
+      return { statusCode: 200, body: JSON.stringify({ success: true, message: '视频源已删除' }) };
+    }
+
+    // ==========================================
+    // Video Source Public API (for browsing)
+    // ==========================================
+
+    if (path === '/video-sources' && method === 'GET') {
+      const videoSources = await getCollection('videoSources');
+      const safeSources = Object.values(videoSources).map(({ api, detail, ...rest }) => ({
+        ...rest,
+        api: api,
+        detail: detail || ''
+      }));
+      return { statusCode: 200, body: JSON.stringify(safeSources) };
+    }
+
+    // ==========================================
+    // Video Source Search & Detail API (Public)
+    // ==========================================
+
+    if (path === '/video-sources/search' && method === 'GET') {
+      const keyword = event.queryStringParameters?.wd as string;
+      const sourceId = event.queryStringParameters?.sourceId as string;
+      if (!keyword || !sourceId) {
+        return { statusCode: 400, body: JSON.stringify({ error: '请提供搜索关键词和视频源ID' }) };
+      }
+
+      const videoSources = await getCollection('videoSources');
+      const source = videoSources[sourceId];
+      if (!source) {
+        return { statusCode: 404, body: JSON.stringify({ error: '视频源不存在' }) };
+      }
+
+      try {
+        const searchUrl = `${source.api}?ac=videolist&wd=${encodeURIComponent(keyword)}`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        const apiRes = await fetch(searchUrl, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
+        clearTimeout(timeout);
+
+        if (!apiRes.ok) {
+          return { statusCode: 502, body: JSON.stringify({ error: `搜索请求失败: HTTP ${apiRes.status}` }) };
+        }
+
+        const data = await apiRes.json();
+        return { statusCode: 200, body: JSON.stringify(data) };
+      } catch (e: any) {
+        return { statusCode: 502, body: JSON.stringify({ error: '搜索失败: ' + (e.message || '网络错误') }) };
+      }
+    }
+
+    if (path === '/video-sources/detail' && method === 'GET') {
+      const sourceId = event.queryStringParameters?.sourceId as string;
+      const vodId = event.queryStringParameters?.ids as string;
+      if (!sourceId || !vodId) {
+        return { statusCode: 400, body: JSON.stringify({ error: '请提供视频源ID和影片ID' }) };
+      }
+
+      const videoSources = await getCollection('videoSources');
+      const source = videoSources[sourceId];
+      if (!source) {
+        return { statusCode: 404, body: JSON.stringify({ error: '视频源不存在' }) };
+      }
+
+      try {
+        const detailUrl = source.detail
+          ? `${source.detail}?ac=videolist&ids=${vodId}`
+          : `${source.api}?ac=videolist&ids=${vodId}`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        const apiRes = await fetch(detailUrl, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
+        clearTimeout(timeout);
+
+        if (!apiRes.ok) {
+          return { statusCode: 502, body: JSON.stringify({ error: `详情请求失败: HTTP ${apiRes.status}` }) };
+        }
+
+        const data = await apiRes.json();
+        return { statusCode: 200, body: JSON.stringify(data) };
+      } catch (e: any) {
+        return { statusCode: 502, body: JSON.stringify({ error: '获取详情失败: ' + (e.message || '网络错误') }) };
+      }
+    }
+
+    if (path === '/video-sources/all-search' && method === 'GET') {
+      const keyword = event.queryStringParameters?.wd as string;
+      if (!keyword) {
+        return { statusCode: 400, body: JSON.stringify({ error: '请提供搜索关键词' }) };
+      }
+
+      const videoSources = await getCollection('videoSources');
+      const allSources = Object.values(videoSources);
+      const results: any[] = [];
+
+      const searchPromises = allSources.map(async (source: any) => {
+        try {
+          const searchUrl = `${source.api}?ac=videolist&wd=${encodeURIComponent(keyword)}`;
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 10000);
+          const apiRes = await fetch(searchUrl, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
+          clearTimeout(timeout);
+
+          if (!apiRes.ok) return;
+          const data = await apiRes.json();
+          if (data.list && Array.isArray(data.list)) {
+            data.list.forEach((item: any) => {
+              results.push({
+                ...item,
+                sourceKey: source.key,
+                sourceName: source.name,
+                sourceId: source.id
+              });
+            });
+          }
+        } catch {
+          // Silently skip failed sources
+        }
+      });
+
+      await Promise.allSettled(searchPromises);
+      return { statusCode: 200, body: JSON.stringify({ list: results, total: results.length }) };
+    }
+
+    // ==========================================
     // Health Check (Diagnostic)
     // ==========================================
-    
+
     if (path === '/health' && method === 'GET') {
       const hasKey = !!TMDB_API_KEY;
       const keyPreview = hasKey ? TMDB_API_KEY.substring(0, 4) + '...' + TMDB_API_KEY.substring(TMDB_API_KEY.length - 4) : '(empty)';
@@ -787,8 +996,40 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
           return { statusCode: 502, body: JSON.stringify({ error: `TVBox接口请求失败: HTTP ${apiRes.status}` }) };
         }
         
-        const data = await apiRes.json();
-        return { statusCode: 200, body: JSON.stringify(data) };
+        let config: any;
+        try {
+          const text = await apiRes.text();
+          config = JSON.parse(text);
+        } catch {
+          return { statusCode: 502, body: JSON.stringify({ error: 'TVBox配置JSON解析失败，请检查接口地址' }) };
+        }
+
+        if (!config.sites || !Array.isArray(config.sites)) {
+          return { statusCode: 502, body: JSON.stringify({ error: 'TVBox配置格式不正确，缺少sites字段' }) };
+        }
+
+        const httpSites = config.sites.filter((s: any) => s.type === 0 || s.type === 1);
+        const allSites = config.sites.map((s: any) => ({
+          key: s.key,
+          name: s.name,
+          type: s.type,
+          api: s.api,
+          detail: s.ext || '',
+          searchable: s.searchable ?? 1,
+          quickSearch: s.quickSearch ?? 1,
+          filterable: s.filterable ?? 1
+        }));
+
+        return {
+          statusCode: 200,
+          body: JSON.stringify({
+            success: true,
+            spider: config.spider || '',
+            sites: allSites,
+            httpSites,
+            wallpaper: config.wallpaper || ''
+          })
+        };
       } catch (e: any) {
         return { statusCode: 502, body: JSON.stringify({ error: 'TVBox接口解析失败: ' + (e.message || '网络错误') }) };
       }

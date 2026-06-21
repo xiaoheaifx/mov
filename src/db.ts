@@ -6,7 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
-import { Movie, User, Admin, AuthSession } from './types.js';
+import { Movie, User, Admin, AuthSession, VideoSource } from './types.js';
 
 // We dynamically load @netlify/blobs to avoid runtime errors if not on Netlify
 let getStore: any = null;
@@ -44,6 +44,7 @@ interface LocalDBStructure {
   admins: Record<string, Admin>;
   sessions: Record<string, AuthSession>;
   movies: Record<string, Movie>;
+  videoSources: Record<string, VideoSource>;
 }
 
 // Initial placeholder Movies to make the app interactive and delightful
@@ -106,7 +107,8 @@ let localDBCache: LocalDBStructure = {
   users: {},
   admins: {},
   sessions: {},
-  movies: INITIAL_MOVIES
+  movies: INITIAL_MOVIES,
+  videoSources: {}
 };
 
 // Seed the admin account in memory (always, even on Netlify)
@@ -154,7 +156,8 @@ function initLocalDB() {
         users: loaded.users || {},
         admins: loaded.admins || {},
         sessions: loaded.sessions || {},
-        movies: loaded.movies && Object.keys(loaded.movies).length > 0 ? loaded.movies : INITIAL_MOVIES
+        movies: loaded.movies && Object.keys(loaded.movies).length > 0 ? loaded.movies : INITIAL_MOVIES,
+        videoSources: loaded.videoSources || {}
       };
     } catch (e) {
       console.error('Error reading local db file, resetting to basic defaults.', e);

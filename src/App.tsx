@@ -39,7 +39,7 @@ import {
   Skull,
   Zap
 } from 'lucide-react';
-import { Movie, TMDBMovie, TVBoxSite, TVBoxVideoItem, TVBoxVideoDetail, PosterSearchResult } from './types.js';
+import { Movie, TMDBMovie, TVBoxSite, TVBoxVideoItem, TVBoxVideoDetail, PosterSearchResult, VideoSource } from './types.js';
 import MovieCard from './components/MovieCard.js';
 import VideoPlayer from './components/VideoPlayer.js';
 import HeroCarousel from './components/HeroCarousel.js';
@@ -69,7 +69,7 @@ export default function App() {
   const [adminUsers, setAdminUsers] = useState<Array<{ username: string; createdAt: string; role: 'viewer' }>>([]);
   const [adminStreamers, setAdminStreamers] = useState<Array<{ username: string; createdAt: string; role: 'streamer' }>>([]);
   const [dashLoading, setDashLoading] = useState(false);
-  const [dashActiveTab, setDashActiveTab] = useState<'movies' | 'users' | 'streamers' | 'tvbox'>('movies');
+  const [dashActiveTab, setDashActiveTab] = useState<'video-sources' | 'movies' | 'users' | 'streamers' | 'tvbox'>('video-sources');
 
   // Search, Filters & View Options
   const [searchQuery, setSearchQuery] = useState('');
@@ -135,6 +135,13 @@ export default function App() {
   const [tvboxSearchResults, setTvboxSearchResults] = useState<TVBoxVideoItem[]>([]);
   const [tvboxSearchLoading, setTvboxSearchLoading] = useState(false);
   const [tvboxPlayingDetail, setTvboxPlayingDetail] = useState<TVBoxVideoDetail | null>(null);
+
+  // Video Source States
+  const [videoSources, setVideoSources] = useState<VideoSource[]>([]);
+  const [videoSourceLoading, setVideoSourceLoading] = useState(false);
+  const [videoSourceForm, setVideoSourceForm] = useState({ name: '', key: '', api: '', detail: '' });
+  const [editingVideoSource, setEditingVideoSource] = useState<VideoSource | null>(null);
+  const [videoSourceModalOpen, setVideoSourceModalOpen] = useState(false);
 
   // Login mode toggle
   const [loginMode, setLoginMode] = useState<'viewer' | 'admin'>('viewer');
@@ -377,6 +384,82 @@ export default function App() {
     navigateTo('#/tvbox/play');
   };
 
+  // Video Source CRUD handlers
+  const loadVideoSources = async () => {
+    setVideoSourceLoading(true);
+    try {
+      const res = await fetch('/api/admin/video-sources');
+      if (res.ok) {
+        const data = await res.json();
+        setVideoSources(data);
+      }
+    } catch (err) {
+      console.error('Error loading video sources:', err);
+    } finally {
+      setVideoSourceLoading(false);
+    }
+  };
+
+  const handleVideoSourceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!videoSourceForm.name || !videoSourceForm.key || !videoSourceForm.api) {
+      showToast('名称、Key和API地址为必填项', 'error');
+      return;
+    }
+
+    try {
+      const isEditing = !!editingVideoSource;
+      const url = isEditing ? `/api/admin/video-sources/${editingVideoSource.id}` : '/api/admin/video-sources';
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(videoSourceForm)
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        showToast(isEditing ? '视频源更新成功' : '视频源添加成功', 'success');
+        setVideoSourceModalOpen(false);
+        setEditingVideoSource(null);
+        setVideoSourceForm({ name: '', key: '', api: '', detail: '' });
+        loadVideoSources();
+      } else {
+        showToast(data.error || '操作失败', 'error');
+      }
+    } catch (err) {
+      showToast('网络请求失败', 'error');
+    }
+  };
+
+  const handleDeleteVideoSource = async (id: string, name: string) => {
+    if (!confirm(`确定要删除视频源"${name}"吗？`)) return;
+    try {
+      const res = await fetch(`/api/admin/video-sources/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast('视频源已删除', 'success');
+        loadVideoSources();
+      } else {
+        showToast(data.error || '删除失败', 'error');
+      }
+    } catch (err) {
+      showToast('网络请求失败', 'error');
+    }
+  };
+
+  const startEditVideoSource = (source: VideoSource) => {
+    setEditingVideoSource(source);
+    setVideoSourceForm({
+      name: source.name,
+      key: source.key,
+      api: source.api,
+      detail: source.detail || ''
+    });
+    setVideoSourceModalOpen(true);
+  };
+
   // Fetch full details of single selected movie
   useEffect(() => {
     if (activeMovieId && currentRoute === 'movie-detail') {
@@ -416,7 +499,9 @@ export default function App() {
 
     try {
       setDashLoading(true);
-      if (dashActiveTab === 'movies') {
+      if (dashActiveTab === 'video-sources') {
+        await loadVideoSources();
+      } else if (dashActiveTab === 'movies') {
         const res = await fetch('/api/admin/movies');
         if (res.ok) setAdminMovies(await res.json());
       } else if (dashActiveTab === 'users' && currentUser.role === 'admin') {
@@ -1093,13 +1178,7 @@ export default function App() {
                 getImageUrl={getTmdbImageUrl}
                 onBack={() => setDetailPageItem(null)}
                 onPlay={(item) => {
-                  if (!currentUser) {
-                    navigateTo('#/login');
-                    showToast('请先登录后再观看影片', 'error');
-                  } else {
-                    setTmdbSelectedMovie(item);
-                    navigateTo('#/detail');
-                  }
+                  showToast('未找到可用视频源，请先在管理后台添加个人视频源', 'error');
                 }}
               />
             )}
@@ -1188,12 +1267,7 @@ export default function App() {
                 getImageUrl={getTmdbImageUrl}
                 onBack={() => setDetailPageItem(null)}
                 onPlay={(item) => {
-                  if (!currentUser) {
-                    navigateTo('#/login');
-                    showToast('请先登录后再观看影片', 'error');
-                  } else {
-                    setTmdbSelectedMovie(item);
-                  }
+                  showToast('未找到可用视频源，请先在管理后台添加个人视频源', 'error');
                 }}
               />
             )}
@@ -1775,6 +1849,18 @@ export default function App() {
                 {/* Left Side menu tabs Selection */}
                 <div className="flex items-center gap-1 border-b border-neutral-250 dark:border-neutral-800/80 pb-px">
                   <button
+                    id="tab-video-sources-control"
+                    onClick={() => setDashActiveTab('video-sources')}
+                    className={`px-5 py-3 text-xs sm:text-sm font-semibold border-b-2 cursor-pointer transition-colors ${
+                      dashActiveTab === 'video-sources'
+                        ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
+                        : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:text-neutral-400'
+                    }`}
+                  >
+                    📡 个人视频源 ({videoSources.length})
+                  </button>
+
+                  <button
                     id="tab-movies-control"
                     onClick={() => setDashActiveTab('movies')}
                     className={`px-5 py-3 text-xs sm:text-sm font-semibold border-b-2 cursor-pointer transition-colors ${
@@ -1838,6 +1924,84 @@ export default function App() {
                     </div>
                   ) : (
                     <>
+                      {/* Sub-tab 0: Personal Video Sources */}
+                      {dashActiveTab === 'video-sources' && (
+                        <div id="dash-video-sources-tab-content" className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="font-bold text-sm dark:text-white">个人视频源列表</h3>
+                            <button
+                              onClick={() => {
+                                setEditingVideoSource(null);
+                                setVideoSourceForm({ name: '', key: '', api: '', detail: '' });
+                                setVideoSourceModalOpen(true);
+                              }}
+                              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow shadow-blue-500/10 cursor-pointer"
+                            >
+                              <Plus className="w-4 h-4" /> 添加视频源
+                            </button>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse text-xs sm:text-xs">
+                              <thead>
+                                <tr className="border-b border-neutral-100 dark:border-neutral-800 text-neutral-400 font-bold tracking-wide">
+                                  <th className="py-3 px-2">名称</th>
+                                  <th className="py-3 px-2">Key</th>
+                                  <th className="py-3 px-2 hidden md:table-cell font-mono">API地址</th>
+                                  <th className="py-3 px-2 hidden sm:table-cell">Detail地址</th>
+                                  <th className="py-3 px-2 text-right">管理操作</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-neutral-100 dark:divide-neutral-850">
+                                {videoSources.map(source => (
+                                  <tr key={source.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-950/40 transition-colors">
+                                    <td className="py-3 px-2">
+                                      <div className="font-bold text-neutral-950 dark:text-white truncate max-w-[120px] sm:max-w-xs">{source.name}</div>
+                                      <div className="text-[10px] text-neutral-400 mt-0.5">{new Date(source.createdAt).toLocaleDateString()}</div>
+                                    </td>
+                                    <td className="py-3 px-2">
+                                      <span className="inline-block bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 px-2 py-0.5 rounded font-mono text-[10px]">
+                                        {source.key}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-2 hidden md:table-cell font-mono text-neutral-400 max-w-[200px] truncate">
+                                      {source.api}
+                                    </td>
+                                    <td className="py-3 px-2 hidden sm:table-cell text-neutral-400 max-w-[150px] truncate">
+                                      {source.detail || '-'}
+                                    </td>
+                                    <td className="py-3 px-2 text-right">
+                                      <div className="inline-flex items-center gap-1">
+                                        <button
+                                          onClick={() => startEditVideoSource(source)}
+                                          className="p-1 text-blue-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded cursor-pointer"
+                                          title="编辑视频源"
+                                        >
+                                          <Edit className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteVideoSource(source.id, source.name)}
+                                          className="p-1 text-rose-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded cursor-pointer"
+                                          title="删除视频源"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                                {videoSources.length === 0 && (
+                                  <tr>
+                                    <td colSpan={5} className="py-8 text-center text-neutral-400 italic">
+                                      暂无个人视频源，请点击右上角添加。支持MoonTV格式，填写名称、Key、API地址即可。
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Sub-tab 1: Movies List Controller */}
                       {dashActiveTab === 'movies' && (
                         <div id="dash-movies-tab-content" className="space-y-4">
@@ -2286,6 +2450,91 @@ export default function App() {
                 </button>
               </div>
 
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Video Source Form Modal */}
+      {videoSourceModalOpen && (
+        <div id="video-source-form-modal" className="fixed inset-0 z-55 flex items-center justify-center bg-black/65 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-210 dark:border-neutral-800 rounded-3xl w-full max-w-md p-6 space-y-5 text-left shadow-2xl animate-zoom-in my-8">
+            <div className="flex items-center justify-between border-b border-neutral-150 dark:border-neutral-800 pb-3">
+              <h3 className="text-lg font-black dark:text-white tracking-tight">
+                {editingVideoSource ? '编辑视频源' : '添加个人视频源'}
+              </h3>
+              <button
+                onClick={() => setVideoSourceModalOpen(false)}
+                className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full cursor-pointer text-neutral-400 hover:text-rose-500 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleVideoSourceSubmit} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-neutral-500 uppercase">视频源名称</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="例如: 量子资源"
+                  value={videoSourceForm.name}
+                  onChange={e => setVideoSourceForm({ ...videoSourceForm, name: e.target.value })}
+                  className="w-full px-3 py-2.5 bg-neutral-100 dark:bg-neutral-950 border-0 rounded-xl text-xs sm:text-sm font-semibold text-neutral-900 dark:text-white"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-neutral-500 uppercase">Key标识</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="例如: liangzi"
+                  value={videoSourceForm.key}
+                  onChange={e => setVideoSourceForm({ ...videoSourceForm, key: e.target.value })}
+                  className="w-full px-3 py-2.5 bg-neutral-100 dark:bg-neutral-950 border-0 rounded-xl text-xs sm:text-sm font-mono text-neutral-900 dark:text-white"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-neutral-500 uppercase">API地址</label>
+                <input
+                  type="url"
+                  required
+                  placeholder="https://example.com/api.php/provide/vod/"
+                  value={videoSourceForm.api}
+                  onChange={e => setVideoSourceForm({ ...videoSourceForm, api: e.target.value })}
+                  className="w-full px-3 py-2.5 bg-neutral-100 dark:bg-neutral-950 border-0 rounded-xl text-xs sm:text-sm font-mono text-blue-600 dark:text-blue-400"
+                />
+                <p className="text-[10px] text-neutral-400 mt-1">支持MoonTV格式的API地址，如: https://api.com/api.php/provide/vod/</p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-neutral-500 uppercase">Detail地址 (选填)</label>
+                <input
+                  type="url"
+                  placeholder="留空则使用API地址"
+                  value={videoSourceForm.detail}
+                  onChange={e => setVideoSourceForm({ ...videoSourceForm, detail: e.target.value })}
+                  className="w-full px-3 py-2.5 bg-neutral-100 dark:bg-neutral-950 border-0 rounded-xl text-xs sm:text-sm font-mono text-neutral-600 dark:text-neutral-400"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-neutral-150 dark:border-neutral-800">
+                <button
+                  type="button"
+                  onClick={() => setVideoSourceModalOpen(false)}
+                  className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-750 text-neutral-600 dark:text-neutral-300 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                >
+                  {editingVideoSource ? '保存修改' : '添加视频源'}
+                </button>
+              </div>
             </form>
           </div>
         </div>
