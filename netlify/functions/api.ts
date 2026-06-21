@@ -595,6 +595,32 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
     }
 
     // ==========================================
+    // Health Check (Diagnostic)
+    // ==========================================
+    
+    if (path === '/health' && method === 'GET') {
+      const hasKey = !!TMDB_API_KEY;
+      const keyPreview = hasKey ? TMDB_API_KEY.substring(0, 4) + '...' + TMDB_API_KEY.substring(TMDB_API_KEY.length - 4) : '(empty)';
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          status: 'ok',
+          function: 'api',
+          tmdb_api_key: {
+            present: hasKey,
+            preview: keyPreview,
+            length: TMDB_API_KEY.length
+          },
+          admin_username: process.env.ADMIN_USERNAME || 'xiaohe',
+          admin_password_hash_set: !!process.env.ADMIN_PASSWORD_HASH,
+          admin_password_set: !!process.env.ADMIN_PASSWORD,
+          node_version: process.version,
+          env_keys: Object.keys(process.env).filter(k => k.startsWith('TMDB') || k.startsWith('ADMIN') || k.startsWith('VITE'))
+        })
+      };
+    }
+
+    // ==========================================
     // TMDB API Proxy
     // ==========================================
     
