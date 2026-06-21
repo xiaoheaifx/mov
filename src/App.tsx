@@ -42,7 +42,7 @@ import MovieSection from './components/MovieSection.js';
 import TVBoxPanel from './components/TVBoxPanel.js';
 import TMDBDetailModal from './components/TMDBDetailModal.js';
 
-type PageRoute = 'home' | 'movie-detail' | 'viewer-login' | 'admin-login' | 'admin-dashboard' | 'tvbox-play';
+type PageRoute = 'home' | 'movie-detail' | 'viewer-login' | 'admin-login' | 'admin-dashboard' | 'tvbox-play' | 'movies' | 'tv' | 'anime' | 'variety';
 
 export default function App() {
   // Navigation Routing States
@@ -118,6 +118,9 @@ export default function App() {
   const [tvboxSearchLoading, setTvboxSearchLoading] = useState(false);
   const [tvboxPlayingDetail, setTvboxPlayingDetail] = useState<TVBoxVideoDetail | null>(null);
 
+  // Login mode toggle
+  const [loginMode, setLoginMode] = useState<'viewer' | 'admin'>('viewer');
+
   // Poster Search States (98dou API)
   const [posterSearchResults, setPosterSearchResults] = useState<PosterSearchResult[]>([]);
   const [posterSearchLoading, setPosterSearchLoading] = useState(false);
@@ -162,6 +165,14 @@ export default function App() {
         setCurrentRoute('admin-login');
       } else if (hash === '#/admin/dashboard') {
         setCurrentRoute('admin-dashboard');
+      } else if (hash === '#/movies') {
+        setCurrentRoute('movies');
+      } else if (hash === '#/tv') {
+        setCurrentRoute('tv');
+      } else if (hash === '#/anime') {
+        setCurrentRoute('anime');
+      } else if (hash === '#/variety') {
+        setCurrentRoute('variety');
       } else if (hash === '#/tvbox/play') {
         setCurrentRoute('tvbox-play');
       }
@@ -724,11 +735,11 @@ export default function App() {
 
           {/* Center Navigation */}
           <nav className="hidden md:flex items-center gap-8">
-            <button className="text-lg font-semibold text-neutral-900 hover:text-red-600 transition-colors">首页</button>
-            <button className="text-lg font-medium text-gray-500 hover:text-neutral-900 transition-colors">电影</button>
-            <button className="text-lg font-medium text-gray-500 hover:text-neutral-900 transition-colors">剧集</button>
-            <button className="text-lg font-medium text-gray-500 hover:text-neutral-900 transition-colors">动漫</button>
-            <button className="text-lg font-medium text-gray-500 hover:text-neutral-900 transition-colors">综艺</button>
+            <button onClick={() => navigateTo('#/')} className={`text-lg font-semibold transition-colors ${currentRoute === 'home' ? 'text-red-600' : 'text-neutral-900 hover:text-red-600'}`}>首页</button>
+            <button onClick={() => navigateTo('#/movies')} className={`text-lg font-medium transition-colors ${currentRoute === 'movies' ? 'text-red-600' : 'text-gray-500 hover:text-neutral-900'}`}>电影</button>
+            <button onClick={() => navigateTo('#/tv')} className={`text-lg font-medium transition-colors ${currentRoute === 'tv' ? 'text-red-600' : 'text-gray-500 hover:text-neutral-900'}`}>剧集</button>
+            <button onClick={() => navigateTo('#/anime')} className={`text-lg font-medium transition-colors ${currentRoute === 'anime' ? 'text-red-600' : 'text-gray-500 hover:text-neutral-900'}`}>动漫</button>
+            <button onClick={() => navigateTo('#/variety')} className={`text-lg font-medium transition-colors ${currentRoute === 'variety' ? 'text-red-600' : 'text-gray-500 hover:text-neutral-900'}`}>综艺</button>
           </nav>
 
           {/* Right Controls */}
@@ -788,83 +799,32 @@ export default function App() {
         {currentRoute === 'home' && (
           <div id="route-home" className="animate-fade-in">
 
-            {/* Hero Banner - TMDB or Fallback */}
-            {!tmdbTrendingLoading && tmdbTrending.length > 0 ? (
-              <div className="relative w-full h-[60vh] min-h-[400px] overflow-hidden">
-                <img
-                  src={getTmdbImageUrl(tmdbTrending[0].backdrop_path, 'w1280')}
-                  alt={tmdbTrending[0].title || tmdbTrending[0].name}
-                  className="w-full h-full object-cover"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-                <div className="absolute inset-0 bg-gradient-to-r from-white/90 via-white/50 to-transparent" />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#f5f5f5] via-transparent to-white/20" />
-                
-                <div className="absolute bottom-16 left-8 sm:left-12 lg:left-16 max-w-lg">
-                  <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-neutral-900 mb-3 leading-tight">
-                    {tmdbTrending[0].title || tmdbTrending[0].name}
-                  </h1>
-                  <div className="flex items-center gap-3 mb-3">
-                    <span className="text-green-600 font-bold">{Math.round((tmdbTrending[0].vote_average || 0) * 10)}% 匹配</span>
-                    <span className="text-gray-500">{(tmdbTrending[0].release_date || tmdbTrending[0].first_air_date || '').split('-')[0]}</span>
-                    <span className="px-2 py-0.5 border border-gray-400 text-gray-500 text-xs rounded">HD</span>
-                  </div>
-                  <p className="text-gray-600 text-sm sm:text-base line-clamp-2 mb-5 leading-relaxed">
-                    {tmdbTrending[0].overview || '暂无简介'}
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setTmdbSelectedMovie(tmdbTrending[0])}
-                      className="flex items-center gap-2 px-6 sm:px-8 py-2.5 sm:py-3 bg-red-600 text-white font-bold rounded-lg hover:bg-red-500 transition-all text-sm sm:text-base shadow-lg shadow-red-600/20"
-                    >
-                      <Play className="w-5 h-5 fill-white" /> 立即播放
-                    </button>
-                    <button
-                      onClick={() => setTmdbSelectedMovie(tmdbTrending[0])}
-                      className="flex items-center gap-2 px-6 sm:px-8 py-2.5 sm:py-3 bg-white/80 text-neutral-900 font-bold rounded-lg hover:bg-white transition-all text-sm sm:text-base border border-gray-200"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                      更多信息
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="relative w-full h-[50vh] min-h-[350px] overflow-hidden bg-gradient-to-br from-red-700 via-red-600 to-orange-500">
-                <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent" />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#f5f5f5] via-transparent to-transparent" />
-                <div className="absolute bottom-16 left-8 sm:left-12 lg:left-16 max-w-lg">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="px-2.5 py-0.5 bg-white/20 text-white text-xs font-bold rounded-md backdrop-blur-sm">小何影视</span>
-                    <span className="text-white/70 text-sm">欢迎回来</span>
-                  </div>
-                  <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white mb-3 leading-tight">
-                    发现精彩影视
-                  </h1>
-                  <p className="text-white/80 text-sm sm:text-base line-clamp-2 mb-5 leading-relaxed">
-                    {tmdbTrendingLoading ? '正在加载推荐内容...' : '浏览片库中的精选影片，享受极速观影体验。'}
-                  </p>
-                  <div className="flex items-center gap-3">
-                    {movies.length > 0 && (
-                      <button
-                        onClick={() => {
-                          const firstMovie = movies[0];
-                          if (firstMovie) navigateTo(`#/movie/${firstMovie.id}`);
-                        }}
-                        className="flex items-center gap-2 px-6 sm:px-8 py-2.5 sm:py-3 bg-white text-red-600 font-bold rounded-lg hover:bg-gray-100 transition-all text-sm sm:text-base shadow-lg"
-                      >
-                        <Play className="w-5 h-5 fill-red-600" /> 开始观影
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Loading State */}
-            {tmdbTrendingLoading && tmdbTrending.length === 0 && (
-              <div className="w-full h-[60vh] min-h-[400px] bg-gray-200 animate-pulse" />
-            )}
+            {/* Hero Carousel - Auto-rotating Slideshow */}
+            <HeroCarousel
+              items={
+                tmdbTrendingLoading
+                  ? []
+                  : tmdbTrending.slice(0, 8).map(item => ({
+                      id: item.id,
+                      title: item.title || item.name || '未知',
+                      overview: item.overview || '暂无简介',
+                      backdropPath: item.backdrop_path,
+                      posterPath: item.poster_path,
+                      voteAverage: item.vote_average,
+                      releaseDate: item.release_date || item.first_air_date || '',
+                      mediaType: item.media_type || '',
+                    }))
+              }
+              onPlay={(item) => {
+                const tmdbMatch = tmdbTrending.find(m => m.id === item.id);
+                if (tmdbMatch) setTmdbSelectedMovie(tmdbMatch);
+              }}
+              onDetail={(item) => {
+                const tmdbMatch = tmdbTrending.find(m => m.id === item.id);
+                if (tmdbMatch) setTmdbSelectedMovie(tmdbMatch);
+              }}
+              loading={tmdbTrendingLoading}
+            />
 
             {/* Main Content + Right Sidebar */}
             <div className="relative z-10 pb-16">
@@ -872,52 +832,6 @@ export default function App() {
                 
                 {/* Left Main Content */}
                 <div className="flex-1 min-w-0 space-y-8 sm:space-y-12">
-
-                  {/* 片库精选 - Custom Movies from Database */}
-                  {movies.length > 0 && (
-                    <div>
-                      <div className="flex items-center justify-between mb-3 sm:mb-4">
-                        <div className="flex items-center gap-2.5">
-                          <Flame className="w-5 h-5 text-red-500" />
-                          <h2 className="text-lg sm:text-xl font-bold text-neutral-900">片库精选</h2>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                        {moviesLoading ? (
-                          Array.from({ length: 5 }).map((_, i) => (
-                            <div key={i} className="aspect-[16/10] bg-gray-200 rounded-xl animate-pulse" />
-                          ))
-                        ) : (
-                          movies.map((movie) => (
-                            <div
-                              key={movie.id}
-                              onClick={() => navigateTo(`#/movie/${movie.id}`)}
-                              className="group cursor-pointer"
-                            >
-                              <div className="relative aspect-[16/10] bg-gray-200 rounded-xl overflow-hidden shadow-md mb-2">
-                                <img
-                                  src={movie.coverUrl}
-                                  alt={movie.title}
-                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                  loading="lazy"
-                                  referrerPolicy="no-referrer"
-                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                                />
-                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
-                                  <Play className="w-10 h-10 text-white fill-white opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100" />
-                                </div>
-                                <span className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm text-neutral-700 text-[10px] font-semibold px-2 py-0.5 rounded-md">
-                                  {movie.genre}
-                                </span>
-                              </div>
-                              <p className="text-sm font-semibold text-neutral-900 truncate group-hover:text-red-600 transition-colors">{movie.title}</p>
-                              <p className="text-xs text-gray-400 mt-0.5">{movie.duration}</p>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
 
                   {/* Now Playing */}
                   {tmdbNowPlaying.length > 0 && (
@@ -1193,6 +1107,90 @@ export default function App() {
         )}
 
         {/* ====================================
+            VIEW: CATEGORY PAGES (电影 / 剧集 / 动漫 / 综艺)
+            ==================================== */}
+        {['movies', 'tv', 'anime', 'variety'].includes(currentRoute) && (
+          <div id="route-category" className="animate-fade-in px-8 sm:px-12 lg:px-16 py-6 space-y-8">
+            <div className="flex items-center gap-3">
+              <button onClick={() => navigateTo('#/')} className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-blue-400 font-bold cursor-pointer transition-colors">
+                <ChevronLeft className="w-4 h-4" /> 返回主页
+              </button>
+              <span className="text-neutral-300">/</span>
+              <h1 className="text-xl font-bold text-neutral-900">
+                {currentRoute === 'movies' ? '电影' : currentRoute === 'tv' ? '剧集' : currentRoute === 'anime' ? '动漫' : '综艺'}
+              </h1>
+            </div>
+
+            {/* Category sub-navigation */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {[
+                { key: 'movies', label: '电影' },
+                { key: 'tv', label: '剧集' },
+                { key: 'anime', label: '动漫' },
+                { key: 'variety', label: '综艺' },
+              ].map(cat => (
+                <button
+                  key={cat.key}
+                  onClick={() => navigateTo(`#/${cat.key}`)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors cursor-pointer ${
+                    currentRoute === cat.key
+                      ? 'bg-red-600 text-white'
+                      : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Movies Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+              {(currentRoute === 'movies'
+                ? [...tmdbPopular, ...tmdbNowPlaying]
+                : currentRoute === 'tv'
+                ? [...tmdbTvPopular, ...tmdbTvTopRated]
+                : currentRoute === 'anime'
+                ? tmdbTrending.filter(m => m.media_type === 'tv' && (m.genre_ids || []).includes(16))
+                : tmdbTrending.filter(m => m.media_type !== 'movie')
+              )
+                .filter((item, i, arr) => arr.findIndex(x => x.id === item.id) === i)
+                .map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => setTmdbSelectedMovie(item)}
+                    className="group cursor-pointer"
+                  >
+                    <div className="relative aspect-[2/3] bg-gray-200 rounded-xl overflow-hidden shadow-md mb-2">
+                      <img
+                        src={getTmdbImageUrl(item.poster_path, 'w342')}
+                        alt={item.title || item.name}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                        loading="lazy"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
+                        <Play className="w-10 h-10 text-white fill-white opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100" />
+                      </div>
+                      <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-sm text-white text-[10px] font-semibold px-2 py-0.5 rounded-md">
+                        {Math.round((item.vote_average || 0) * 10)}%
+                      </div>
+                    </div>
+                    <p className="text-sm font-semibold text-neutral-900 truncate group-hover:text-red-600 transition-colors">{item.title || item.name}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{(item.release_date || item.first_air_date || '').split('-')[0]}</p>
+                  </div>
+                ))}
+            </div>
+
+            {/* TMDB Detail Modal */}
+            <TMDBDetailModal
+              item={tmdbSelectedMovie}
+              getImageUrl={getTmdbImageUrl}
+              onClose={() => setTmdbSelectedMovie(null)}
+            />
+          </div>
+        )}
+
+        {/* ====================================
             VIEW: MOVIE DETAIL (Player Page)
             ==================================== */}
         {currentRoute === 'movie-detail' && (
@@ -1381,60 +1379,141 @@ export default function App() {
           <div id="route-viewer-login" className="max-w-md mx-auto py-12 animate-fade-in text-left">
             <div className="bg-white dark:bg-neutral-900 border border-neutral-205 dark:border-neutral-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
               
-              <div className="text-center space-y-1.5">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 mb-2">
-                  <User className="w-6 h-6" />
-                </div>
-                <h2 className="text-2xl font-black dark:text-white tracking-tight">普通观众登录</h2>
-                <p className="text-xs text-neutral-500">接入小河私密多比例极速放映终端</p>
-              </div>
-
-              {/* Informative notice block */}
-              <div className="bg-blue-500/5 p-4 rounded-2xl border border-blue-500/15 leading-relaxed text-xs text-blue-800 dark:text-blue-300">
-                <p className="font-bold flex items-center gap-1.5 mb-1 text-blue-600 dark:text-blue-300">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping" />
-                  特许授权账号分发通告
-                </p>
-                <p className="text-neutral-500 dark:text-neutral-400">
-                  普通观众账号<strong>不由观众自行注册</strong>。为了保证站点在海外节点服务器的缓冲带宽顺畅，目前新账号只能由<strong>超级管理员</strong>在管理后台手动创建分发。请向您的客服或推荐人索要特许账户（用户名+密码）直接登录！
-                </p>
-              </div>
-
-              <form id="viewer-login-form" onSubmit={handleViewerLogin} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label htmlFor="viewer-user" className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">特许用户名 / 手机号</label>
-                  <input
-                    id="viewer-user"
-                    name="username"
-                    type="text"
-                    required
-                    placeholder="输入分配的用户名..."
-                    className="w-full px-4 py-2.5 bg-neutral-100 dark:bg-neutral-950 text-sm border-0 focus:ring-2 focus:ring-blue-500/20 rounded-xl text-neutral-900 dark:text-white font-semibold"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label htmlFor="viewer-pass" className="text-xs font-semibold text-neutral-600 dark:text-neutral-300 font-sans">登录密码</label>
-                  <input
-                    id="viewer-pass"
-                    name="password"
-                    type="password"
-                    required
-                    placeholder="请输入安全开通密码..."
-                    className="w-full px-4 py-2.5 bg-neutral-100 dark:bg-neutral-950 text-sm border-0 focus:ring-2 focus:ring-blue-500/20 rounded-xl text-neutral-900 dark:text-white font-sans"
-                  />
-                </div>
-
+              {/* Login type tabs */}
+              <div className="flex bg-neutral-100 dark:bg-neutral-800 rounded-xl p-1">
                 <button
-                  id="viewer-login-submit"
-                  type="submit"
-                  className="w-full py-3 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 font-bold text-white text-sm rounded-xl cursor-pointer transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-1.5"
+                  onClick={() => setLoginMode('viewer')}
+                  className={`flex-1 py-2 px-4 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+                    loginMode === 'viewer'
+                      ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-sm'
+                      : 'text-neutral-500 hover:text-neutral-700 dark:text-neutral-400'
+                  }`}
                 >
-                  确认进入点播系统
+                  普通观众登录
                 </button>
-              </form>
+                <button
+                  onClick={() => setLoginMode('admin')}
+                  className={`flex-1 py-2 px-4 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+                    loginMode === 'admin'
+                      ? 'bg-white dark:bg-neutral-900 text-neutral-900 dark:text-white shadow-sm'
+                      : 'text-neutral-500 hover:text-neutral-700 dark:text-neutral-400'
+                  }`}
+                >
+                  管理员/直播员登录
+                </button>
+              </div>
 
-              <div className="text-center pt-2">
+              {loginMode === 'viewer' ? (
+                <>
+                  <div className="text-center space-y-1.5">
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 mb-2">
+                      <User className="w-6 h-6" />
+                    </div>
+                    <h2 className="text-2xl font-black dark:text-white tracking-tight">普通观众登录</h2>
+                    <p className="text-xs text-neutral-500">接入小河私密多比例极速放映终端</p>
+                  </div>
+
+                  <div className="bg-blue-500/5 p-4 rounded-2xl border border-blue-500/15 leading-relaxed text-xs text-blue-800 dark:text-blue-300">
+                    <p className="font-bold flex items-center gap-1.5 mb-1 text-blue-600 dark:text-blue-300">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-ping" />
+                      特许授权账号分发通告
+                    </p>
+                    <p className="text-neutral-500 dark:text-neutral-400">
+                      普通观众账号<strong>不由观众自行注册</strong>。为了保证站点在海外节点服务器的缓冲带宽顺畅，目前新账号只能由<strong>超级管理员</strong>在管理后台手动创建分发。请向您的客服或推荐人索要特许账户（用户名+密码）直接登录！
+                    </p>
+                  </div>
+
+                  <form id="viewer-login-form" onSubmit={handleViewerLogin} className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label htmlFor="viewer-user" className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">特许用户名 / 手机号</label>
+                      <input
+                        id="viewer-user"
+                        name="username"
+                        type="text"
+                        required
+                        placeholder="输入分配的用户名..."
+                        className="w-full px-4 py-2.5 bg-neutral-100 dark:bg-neutral-950 text-sm border-0 focus:ring-2 focus:ring-blue-500/20 rounded-xl text-neutral-900 dark:text-white font-semibold"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label htmlFor="viewer-pass" className="text-xs font-semibold text-neutral-600 dark:text-neutral-300 font-sans">登录密码</label>
+                      <input
+                        id="viewer-pass"
+                        name="password"
+                        type="password"
+                        required
+                        placeholder="请输入安全开通密码..."
+                        className="w-full px-4 py-2.5 bg-neutral-100 dark:bg-neutral-950 text-sm border-0 focus:ring-2 focus:ring-blue-500/20 rounded-xl text-neutral-900 dark:text-white font-sans"
+                      />
+                    </div>
+
+                    <button
+                      id="viewer-login-submit"
+                      type="submit"
+                      className="w-full py-3 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 font-bold text-white text-sm rounded-xl cursor-pointer transition-all shadow-lg shadow-blue-500/20 flex items-center justify-center gap-1.5"
+                    >
+                      确认进入点播系统
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <>
+                  <div className="text-center space-y-1.5">
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 mb-2">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                    </div>
+                    <h2 className="text-2xl font-black dark:text-white tracking-tight">管理员/直播员登录</h2>
+                    <p className="text-xs text-neutral-500">进入后台影视内容与用户管理系统</p>
+                  </div>
+
+                  <div className="bg-red-500/5 p-4 rounded-2xl border border-red-500/15 leading-relaxed text-xs text-red-800 dark:text-red-300">
+                    <p className="font-bold flex items-center gap-1.5 mb-1 text-red-600 dark:text-red-300">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
+                      后台管理权限验证
+                    </p>
+                    <p className="text-neutral-500 dark:text-neutral-400">
+                      此区域仅限<strong>管理员</strong>或<strong>受权直播员</strong>登录。管理员拥有全部权限（管理影片、创建用户、管理直播员），直播员仅可管理影片内容。
+                    </p>
+                  </div>
+
+                  <form id="admin-login-form" onSubmit={handleAdminLogin} className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label htmlFor="admin-user" className="text-xs font-semibold text-neutral-600 dark:text-neutral-300">管理员账户 / 直播员工号</label>
+                      <input
+                        id="admin-user"
+                        name="username"
+                        type="text"
+                        required
+                        placeholder="输入管理员或直播员用户名..."
+                        className="w-full px-4 py-2.5 bg-neutral-100 dark:bg-neutral-950 text-sm border-0 focus:ring-2 focus:ring-red-500/20 rounded-xl text-neutral-900 dark:text-white font-semibold"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label htmlFor="admin-pass" className="text-xs font-semibold text-neutral-600 dark:text-neutral-300 font-sans">后台验证密码</label>
+                      <input
+                        id="admin-pass"
+                        name="password"
+                        type="password"
+                        required
+                        placeholder="输入后台安全密码..."
+                        className="w-full px-4 py-2.5 bg-neutral-100 dark:bg-neutral-950 text-sm border-0 focus:ring-2 focus:ring-red-500/20 rounded-xl text-neutral-900 dark:text-white font-sans"
+                      />
+                    </div>
+
+                    <button
+                      id="admin-login-submit"
+                      type="submit"
+                      className="w-full py-3 bg-red-600 hover:bg-red-500 active:bg-red-700 font-bold text-white text-sm rounded-xl cursor-pointer transition-all shadow-lg shadow-red-500/20 flex items-center justify-center gap-1.5"
+                    >
+                      进入后台管理控制台
+                    </button>
+                  </form>
+                </>
+              )}
+
+              <div className="text-center pt-2 border-t border-neutral-100 dark:border-neutral-800">
                 <button 
                   onClick={() => navigateTo('#/')}
                   className="text-xs font-semibold text-neutral-400 hover:text-blue-500"

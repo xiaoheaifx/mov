@@ -689,6 +689,77 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
     }
 
     // ==========================================
+    // TVBox API Proxy
+    // ==========================================
+    
+    if (path === '/tvbox/parse' && method === 'POST') {
+      const { url } = body;
+      if (!url) return { statusCode: 400, body: JSON.stringify({ error: '请提供TVBox接口地址' }) };
+      
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        const apiRes = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
+        clearTimeout(timeout);
+        
+        if (!apiRes.ok) {
+          return { statusCode: 502, body: JSON.stringify({ error: `TVBox接口请求失败: HTTP ${apiRes.status}` }) };
+        }
+        
+        const data = await apiRes.json();
+        return { statusCode: 200, body: JSON.stringify(data) };
+      } catch (e: any) {
+        return { statusCode: 502, body: JSON.stringify({ error: 'TVBox接口解析失败: ' + (e.message || '网络错误') }) };
+      }
+    }
+
+    if (path === '/tvbox/search' && method === 'GET') {
+      const siteUrl = event.queryStringParameters?.url as string;
+      const keyword = event.queryStringParameters?.wd as string;
+      if (!siteUrl || !keyword) return { statusCode: 400, body: JSON.stringify({ error: '请提供站点URL和搜索关键词' }) };
+      
+      try {
+        const searchUrl = `${siteUrl}?ac=videolist&wd=${encodeURIComponent(keyword)}`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        const apiRes = await fetch(searchUrl, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
+        clearTimeout(timeout);
+        
+        if (!apiRes.ok) {
+          return { statusCode: 502, body: JSON.stringify({ error: `搜索请求失败: HTTP ${apiRes.status}` }) };
+        }
+        
+        const data = await apiRes.json();
+        return { statusCode: 200, body: JSON.stringify(data) };
+      } catch (e: any) {
+        return { statusCode: 502, body: JSON.stringify({ error: '搜索请求失败: ' + (e.message || '网络错误') }) };
+      }
+    }
+
+    if (path === '/tvbox/detail' && method === 'GET') {
+      const siteUrl = event.queryStringParameters?.url as string;
+      const vodId = event.queryStringParameters?.ids as string;
+      if (!siteUrl || !vodId) return { statusCode: 400, body: JSON.stringify({ error: '请提供站点URL和影片ID' }) };
+      
+      try {
+        const detailUrl = `${siteUrl}?ac=videolist&ids=${vodId}`;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+        const apiRes = await fetch(detailUrl, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
+        clearTimeout(timeout);
+        
+        if (!apiRes.ok) {
+          return { statusCode: 502, body: JSON.stringify({ error: `详情请求失败: HTTP ${apiRes.status}` }) };
+        }
+        
+        const data = await apiRes.json();
+        return { statusCode: 200, body: JSON.stringify(data) };
+      } catch (e: any) {
+        return { statusCode: 502, body: JSON.stringify({ error: '详情请求失败: ' + (e.message || '网络错误') }) };
+      }
+    }
+
+    // ==========================================
     // Poster Search API (98dou)
     // ==========================================
     
