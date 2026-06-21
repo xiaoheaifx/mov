@@ -688,6 +688,87 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       }
     }
 
+    // Movie/TV detail endpoints
+    if (path.match(/^\/tmdb\/movie\/\d+$/) && method === 'GET') {
+      try {
+        const id = path.split('/')[3];
+        const data = await tmdbFetch(`/movie/${id}`, { append_to_response: 'credits,videos,similar' });
+        return { statusCode: 200, body: JSON.stringify(data) };
+      } catch (e: any) {
+        return { statusCode: 200, body: JSON.stringify({ error: e.message }) };
+      }
+    }
+
+    if (path.match(/^\/tmdb\/tv\/\d+$/) && method === 'GET') {
+      try {
+        const id = path.split('/')[3];
+        const data = await tmdbFetch(`/tv/${id}`, { append_to_response: 'credits,videos,similar' });
+        return { statusCode: 200, body: JSON.stringify(data) };
+      } catch (e: any) {
+        return { statusCode: 200, body: JSON.stringify({ error: e.message }) };
+      }
+    }
+
+    // Discover endpoints for genre/region filtering
+    if (path === '/tmdb/discover/movie' && method === 'GET') {
+      try {
+        const params: Record<string, string> = {};
+        const page = event.queryStringParameters?.page as string;
+        const withGenres = event.queryStringParameters?.with_genres as string;
+        const withOriginalLanguage = event.queryStringParameters?.with_original_language as string;
+        const region = event.queryStringParameters?.region as string;
+        const sortBy = event.queryStringParameters?.sort_by as string;
+        const year = event.queryStringParameters?.year as string;
+        if (page) params.page = page;
+        if (withGenres) params.with_genres = withGenres;
+        if (withOriginalLanguage) params.with_original_language = withOriginalLanguage;
+        if (region) params.region = region;
+        if (sortBy) params.sort_by = sortBy;
+        if (year) params.year = year;
+        const data = await tmdbFetch('/discover/movie', params);
+        return { statusCode: 200, body: JSON.stringify(data) };
+      } catch (e: any) {
+        return { statusCode: 200, body: JSON.stringify({ results: [], error: e.message }) };
+      }
+    }
+
+    if (path === '/tmdb/discover/tv' && method === 'GET') {
+      try {
+        const params: Record<string, string> = {};
+        const page = event.queryStringParameters?.page as string;
+        const withGenres = event.queryStringParameters?.with_genres as string;
+        const withOriginalLanguage = event.queryStringParameters?.with_original_language as string;
+        const sortBy = event.queryStringParameters?.sort_by as string;
+        if (page) params.page = page;
+        if (withGenres) params.with_genres = withGenres;
+        if (withOriginalLanguage) params.with_original_language = withOriginalLanguage;
+        if (sortBy) params.sort_by = sortBy;
+        const data = await tmdbFetch('/discover/tv', params);
+        return { statusCode: 200, body: JSON.stringify(data) };
+      } catch (e: any) {
+        return { statusCode: 200, body: JSON.stringify({ results: [], error: e.message }) };
+      }
+    }
+
+    // Genre list endpoints
+    if (path === '/tmdb/genre/movie/list' && method === 'GET') {
+      try {
+        const data = await tmdbFetch('/genre/movie/list');
+        return { statusCode: 200, body: JSON.stringify(data) };
+      } catch (e: any) {
+        return { statusCode: 200, body: JSON.stringify({ genres: [], error: e.message }) };
+      }
+    }
+
+    if (path === '/tmdb/genre/tv/list' && method === 'GET') {
+      try {
+        const data = await tmdbFetch('/genre/tv/list');
+        return { statusCode: 200, body: JSON.stringify(data) };
+      } catch (e: any) {
+        return { statusCode: 200, body: JSON.stringify({ genres: [], error: e.message }) };
+      }
+    }
+
     // ==========================================
     // TVBox API Proxy
     // ==========================================

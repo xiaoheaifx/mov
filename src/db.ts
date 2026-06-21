@@ -184,6 +184,12 @@ export async function getCollection<T extends keyof LocalDBStructure>(collection
       const store = getStore({ name: 'xiaohe-movies', siteID: process.env.SITE_ID });
       const data = await store.get(collection, { type: 'json' });
       if (data) {
+        if (collection === 'admins') {
+          seedAdminAccount();
+          const merged = { ...(data as any), ...localDBCache.admins };
+          localDBCache.admins = merged;
+          return merged as LocalDBStructure[T];
+        }
         return data as LocalDBStructure[T];
       }
     } catch (e) {

@@ -32,7 +32,12 @@ import {
   Sun,
   Moon,
   Clock,
-  Star
+  Star,
+  Globe,
+  Bomb,
+  Rocket,
+  Skull,
+  Zap
 } from 'lucide-react';
 import { Movie, TMDBMovie, TVBoxSite, TVBoxVideoItem, TVBoxVideoDetail, PosterSearchResult } from './types.js';
 import MovieCard from './components/MovieCard.js';
@@ -41,8 +46,9 @@ import HeroCarousel from './components/HeroCarousel.js';
 import MovieSection from './components/MovieSection.js';
 import TVBoxPanel from './components/TVBoxPanel.js';
 import TMDBDetailModal from './components/TMDBDetailModal.js';
+import TMDBDetailPage from './components/TMDBDetailPage.js';
 
-type PageRoute = 'home' | 'movie-detail' | 'viewer-login' | 'admin-login' | 'admin-dashboard' | 'tvbox-play' | 'movies' | 'tv' | 'anime' | 'variety';
+type PageRoute = 'home' | 'movie-detail' | 'detail' | 'viewer-login' | 'admin-login' | 'admin-dashboard' | 'tvbox-play' | 'movies' | 'tv' | 'anime' | 'variety';
 
 export default function App() {
   // Navigation Routing States
@@ -108,6 +114,18 @@ export default function App() {
   const [tmdbTvTopRatedLoading, setTmdbTvTopRatedLoading] = useState(true);
   const [tmdbSearchResults, setTmdbSearchResults] = useState<TMDBMovie[]>([]);
   const [tmdbSearchLoading, setTmdbSearchLoading] = useState(false);
+  const [tmdbSearchQuery, setTmdbSearchQuery] = useState('');
+  const [tmdbChineseMovies, setTmdbChineseMovies] = useState<TMDBMovie[]>([]);
+  const [tmdbChineseMoviesLoading, setTmdbChineseMoviesLoading] = useState(true);
+  const [tmdbChineseAnime, setTmdbChineseAnime] = useState<TMDBMovie[]>([]);
+  const [tmdbChineseAnimeLoading, setTmdbChineseAnimeLoading] = useState(true);
+  const [tmdbActionMovies, setTmdbActionMovies] = useState<TMDBMovie[]>([]);
+  const [tmdbActionMoviesLoading, setTmdbActionMoviesLoading] = useState(true);
+  const [tmdbScifiMovies, setTmdbScifiMovies] = useState<TMDBMovie[]>([]);
+  const [tmdbScifiMoviesLoading, setTmdbScifiMoviesLoading] = useState(true);
+  const [tmdbHorrorMovies, setTmdbHorrorMovies] = useState<TMDBMovie[]>([]);
+  const [tmdbHorrorMoviesLoading, setTmdbHorrorMoviesLoading] = useState(true);
+  const [detailPageItem, setDetailPageItem] = useState<TMDBMovie | null>(null);
   const [tmdbSelectedMovie, setTmdbSelectedMovie] = useState<TMDBMovie | null>(null);
 
   // TVBox States
@@ -175,6 +193,8 @@ export default function App() {
         setCurrentRoute('variety');
       } else if (hash === '#/tvbox/play') {
         setCurrentRoute('tvbox-play');
+      } else if (hash === '#/detail') {
+        setCurrentRoute('home');
       }
     };
 
@@ -247,13 +267,26 @@ export default function App() {
       setTmdbPopularLoading(true);
       setTmdbTvPopularLoading(true);
       setTmdbTvTopRatedLoading(true);
+      setTmdbChineseMoviesLoading(true);
+      setTmdbChineseAnimeLoading(true);
+      setTmdbActionMoviesLoading(true);
+      setTmdbScifiMoviesLoading(true);
+      setTmdbHorrorMoviesLoading(true);
 
-      const [trending, nowPlaying, popular, tvPopular, tvTopRated] = await Promise.all([
+      const [
+        trending, nowPlaying, popular, tvPopular, tvTopRated,
+        chineseMovies, chineseAnime, actionMovies, scifiMovies, horrorMovies
+      ] = await Promise.all([
         fetchTmdb('/api/tmdb/trending?media_type=all&time_window=week'),
         fetchTmdb('/api/tmdb/movie/now_playing'),
         fetchTmdb('/api/tmdb/movie/popular'),
         fetchTmdb('/api/tmdb/tv/popular'),
         fetchTmdb('/api/tmdb/tv/top_rated'),
+        fetchTmdb('/api/tmdb/discover/movie?with_original_language=zh&sort_by=popularity.desc'),
+        fetchTmdb('/api/tmdb/discover/tv?with_genres=16&with_original_language=zh&sort_by=popularity.desc'),
+        fetchTmdb('/api/tmdb/discover/movie?with_genres=28&sort_by=popularity.desc'),
+        fetchTmdb('/api/tmdb/discover/movie?with_genres=878&sort_by=popularity.desc'),
+        fetchTmdb('/api/tmdb/discover/movie?with_genres=27&sort_by=popularity.desc'),
       ]);
 
       setTmdbTrending(trending);
@@ -261,11 +294,21 @@ export default function App() {
       setTmdbPopular(popular);
       setTmdbTvPopular(tvPopular);
       setTmdbTvTopRated(tvTopRated);
+      setTmdbChineseMovies(chineseMovies);
+      setTmdbChineseAnime(chineseAnime);
+      setTmdbActionMovies(actionMovies);
+      setTmdbScifiMovies(scifiMovies);
+      setTmdbHorrorMovies(horrorMovies);
       setTmdbTrendingLoading(false);
       setTmdbNowPlayingLoading(false);
       setTmdbPopularLoading(false);
       setTmdbTvPopularLoading(false);
       setTmdbTvTopRatedLoading(false);
+      setTmdbChineseMoviesLoading(false);
+      setTmdbChineseAnimeLoading(false);
+      setTmdbActionMoviesLoading(false);
+      setTmdbScifiMoviesLoading(false);
+      setTmdbHorrorMoviesLoading(false);
     };
 
     loadAllTmdb();
@@ -817,11 +860,11 @@ export default function App() {
               }
               onPlay={(item) => {
                 const tmdbMatch = tmdbTrending.find(m => m.id === item.id);
-                if (tmdbMatch) setTmdbSelectedMovie(tmdbMatch);
+                if (tmdbMatch) { setDetailPageItem(tmdbMatch); navigateTo('#/detail'); }
               }}
               onDetail={(item) => {
                 const tmdbMatch = tmdbTrending.find(m => m.id === item.id);
-                if (tmdbMatch) setTmdbSelectedMovie(tmdbMatch);
+                if (tmdbMatch) { setDetailPageItem(tmdbMatch); navigateTo('#/detail'); }
               }}
               loading={tmdbTrendingLoading}
             />
@@ -833,149 +876,95 @@ export default function App() {
                 {/* Left Main Content */}
                 <div className="flex-1 min-w-0 space-y-8 sm:space-y-12">
 
-                  {/* Now Playing */}
-                  {tmdbNowPlaying.length > 0 && (
-                    <div>
-                      <h2 className="text-lg sm:text-xl font-bold text-neutral-900 mb-3 sm:mb-4">正在热映</h2>
-                      <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 scrollbar-hide">
-                        {tmdbNowPlayingLoading ? (
-                          Array.from({ length: 6 }).map((_, i) => (
-                            <div key={i} className="flex-shrink-0 w-[130px] sm:w-[160px] aspect-[2/3] bg-gray-200 rounded-lg animate-pulse" />
-                          ))
-                        ) : (
-                          tmdbNowPlaying.slice(0, 12).map((item) => (
-                            <div
-                              key={item.id}
-                              onClick={() => setTmdbSelectedMovie(item)}
-                              className="flex-shrink-0 w-[130px] sm:w-[160px] group cursor-pointer"
-                            >
-                              <div className="relative aspect-[2/3] bg-gray-200 rounded-lg overflow-hidden shadow-md">
-                                <img
-                                  src={getTmdbImageUrl(item.poster_path, 'w300')}
-                                  alt={item.title || item.name}
-                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                  loading="lazy"
-                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                                />
-                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
-                                  <Play className="w-10 h-10 text-white fill-white opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100" />
-                                </div>
-                              </div>
-                              <p className="text-xs text-gray-600 mt-2 truncate group-hover:text-neutral-900 transition-colors">{item.title || item.name}</p>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
+                  {/* 正在热映 */}
+                  <MovieSection
+                    title="正在热映"
+                    icon={<Film className="w-5 h-5" />}
+                    items={tmdbNowPlaying}
+                    getImageUrl={getTmdbImageUrl}
+                    onItemClick={(item) => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    loading={tmdbNowPlayingLoading}
+                  />
 
-                  {/* Popular Movies */}
-                  {tmdbPopular.length > 0 && (
-                    <div>
-                      <h2 className="text-lg sm:text-xl font-bold text-neutral-900 mb-3 sm:mb-4">热门电影</h2>
-                      <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 scrollbar-hide">
-                        {tmdbPopularLoading ? (
-                          Array.from({ length: 6 }).map((_, i) => (
-                            <div key={i} className="flex-shrink-0 w-[130px] sm:w-[160px] aspect-[2/3] bg-gray-200 rounded-lg animate-pulse" />
-                          ))
-                        ) : (
-                          tmdbPopular.slice(0, 12).map((item) => (
-                            <div
-                              key={item.id}
-                              onClick={() => setTmdbSelectedMovie(item)}
-                              className="flex-shrink-0 w-[130px] sm:w-[160px] group cursor-pointer"
-                            >
-                              <div className="relative aspect-[2/3] bg-gray-200 rounded-lg overflow-hidden shadow-md">
-                                <img
-                                  src={getTmdbImageUrl(item.poster_path, 'w300')}
-                                  alt={item.title || item.name}
-                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                  loading="lazy"
-                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                                />
-                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
-                                  <Play className="w-10 h-10 text-white fill-white opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100" />
-                                </div>
-                              </div>
-                              <p className="text-xs text-gray-600 mt-2 truncate group-hover:text-neutral-900 transition-colors">{item.title || item.name}</p>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
+                  {/* 热门电影 */}
+                  <MovieSection
+                    title="热门电影"
+                    icon={<Flame className="w-5 h-5" />}
+                    items={tmdbPopular}
+                    getImageUrl={getTmdbImageUrl}
+                    onItemClick={(item) => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    loading={tmdbPopularLoading}
+                  />
 
-                  {/* Popular TV */}
-                  {tmdbTvPopular.length > 0 && (
-                    <div>
-                      <h2 className="text-lg sm:text-xl font-bold text-neutral-900 mb-3 sm:mb-4">热门剧集</h2>
-                      <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 scrollbar-hide">
-                        {tmdbTvPopularLoading ? (
-                          Array.from({ length: 6 }).map((_, i) => (
-                            <div key={i} className="flex-shrink-0 w-[130px] sm:w-[160px] aspect-[2/3] bg-gray-200 rounded-lg animate-pulse" />
-                          ))
-                        ) : (
-                          tmdbTvPopular.slice(0, 12).map((item) => (
-                            <div
-                              key={item.id}
-                              onClick={() => setTmdbSelectedMovie(item)}
-                              className="flex-shrink-0 w-[130px] sm:w-[160px] group cursor-pointer"
-                            >
-                              <div className="relative aspect-[2/3] bg-gray-200 rounded-lg overflow-hidden shadow-md">
-                                <img
-                                  src={getTmdbImageUrl(item.poster_path, 'w300')}
-                                  alt={item.title || item.name}
-                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                  loading="lazy"
-                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                                />
-                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
-                                  <Play className="w-10 h-10 text-white fill-white opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100" />
-                                </div>
-                              </div>
-                              <p className="text-xs text-gray-600 mt-2 truncate group-hover:text-neutral-900 transition-colors">{item.title || item.name}</p>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
+                  {/* 华语电影 */}
+                  <MovieSection
+                    title="华语电影"
+                    icon={<Globe className="w-5 h-5" />}
+                    items={tmdbChineseMovies}
+                    getImageUrl={getTmdbImageUrl}
+                    onItemClick={(item) => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    loading={tmdbChineseMoviesLoading}
+                  />
 
-                  {/* Top Rated TV */}
-                  {tmdbTvTopRated.length > 0 && (
-                    <div>
-                      <h2 className="text-lg sm:text-xl font-bold text-neutral-900 mb-3 sm:mb-4">高分推荐</h2>
-                      <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 scrollbar-hide">
-                        {tmdbTvTopRatedLoading ? (
-                          Array.from({ length: 6 }).map((_, i) => (
-                            <div key={i} className="flex-shrink-0 w-[130px] sm:w-[160px] aspect-[2/3] bg-gray-200 rounded-lg animate-pulse" />
-                          ))
-                        ) : (
-                          tmdbTvTopRated.slice(0, 12).map((item) => (
-                            <div
-                              key={item.id}
-                              onClick={() => setTmdbSelectedMovie(item)}
-                              className="flex-shrink-0 w-[130px] sm:w-[160px] group cursor-pointer"
-                            >
-                              <div className="relative aspect-[2/3] bg-gray-200 rounded-lg overflow-hidden shadow-md">
-                                <img
-                                  src={getTmdbImageUrl(item.poster_path, 'w300')}
-                                  alt={item.title || item.name}
-                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                  loading="lazy"
-                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                                />
-                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
-                                  <Play className="w-10 h-10 text-white fill-white opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100" />
-                                </div>
-                              </div>
-                              <p className="text-xs text-gray-600 mt-2 truncate group-hover:text-neutral-900 transition-colors">{item.title || item.name}</p>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
+                  {/* 动作电影 */}
+                  <MovieSection
+                    title="动作电影"
+                    icon={<Bomb className="w-5 h-5" />}
+                    items={tmdbActionMovies}
+                    getImageUrl={getTmdbImageUrl}
+                    onItemClick={(item) => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    loading={tmdbActionMoviesLoading}
+                  />
+
+                  {/* 科幻电影 */}
+                  <MovieSection
+                    title="科幻电影"
+                    icon={<Rocket className="w-5 h-5" />}
+                    items={tmdbScifiMovies}
+                    getImageUrl={getTmdbImageUrl}
+                    onItemClick={(item) => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    loading={tmdbScifiMoviesLoading}
+                  />
+
+                  {/* 恐怖电影 */}
+                  <MovieSection
+                    title="恐怖电影"
+                    icon={<Skull className="w-5 h-5" />}
+                    items={tmdbHorrorMovies}
+                    getImageUrl={getTmdbImageUrl}
+                    onItemClick={(item) => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    loading={tmdbHorrorMoviesLoading}
+                  />
+
+                  {/* 热门剧集 */}
+                  <MovieSection
+                    title="热门剧集"
+                    icon={<Tv className="w-5 h-5" />}
+                    items={tmdbTvPopular}
+                    getImageUrl={getTmdbImageUrl}
+                    onItemClick={(item) => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    loading={tmdbTvPopularLoading}
+                  />
+
+                  {/* 国产动漫 */}
+                  <MovieSection
+                    title="国产动漫"
+                    icon={<Zap className="w-5 h-5" />}
+                    items={tmdbChineseAnime}
+                    getImageUrl={getTmdbImageUrl}
+                    onItemClick={(item) => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    loading={tmdbChineseAnimeLoading}
+                  />
+
+                  {/* 高分推荐 */}
+                  <MovieSection
+                    title="高分推荐"
+                    icon={<Star className="w-5 h-5" />}
+                    items={tmdbTvTopRated}
+                    getImageUrl={getTmdbImageUrl}
+                    onItemClick={(item) => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    loading={tmdbTvTopRatedLoading}
+                  />
 
                   {/* TMDB Data Unavailable Notice */}
                   {!tmdbTrendingLoading && tmdbTrending.length === 0 && tmdbPopular.length === 0 && tmdbNowPlaying.length === 0 && (
@@ -1006,7 +995,7 @@ export default function App() {
                         {tmdbPopular.slice(0, 5).map((item, idx) => (
                           <div
                             key={item.id}
-                            onClick={() => setTmdbSelectedMovie(item)}
+                            onClick={() => { setDetailPageItem(item); navigateTo('#/detail'); }}
                             className="flex gap-3 cursor-pointer group"
                           >
                             <span className="text-lg font-black text-gray-300 w-6 text-center">{idx + 1}</span>
@@ -1030,7 +1019,7 @@ export default function App() {
                         {tmdbNowPlaying.slice(0, 5).map((item, idx) => (
                           <div
                             key={item.id}
-                            onClick={() => setTmdbSelectedMovie(item)}
+                            onClick={() => { setDetailPageItem(item); navigateTo('#/detail'); }}
                             className="flex gap-3 cursor-pointer group"
                           >
                             <span className="text-lg font-black text-gray-300 w-6 text-center">{idx + 1}</span>
@@ -1054,7 +1043,7 @@ export default function App() {
                         {tmdbTvTopRated.slice(0, 5).map((item, idx) => (
                           <div
                             key={item.id}
-                            onClick={() => setTmdbSelectedMovie(item)}
+                            onClick={() => { setDetailPageItem(item); navigateTo('#/detail'); }}
                             className="flex gap-3 cursor-pointer group"
                           >
                             <span className="text-lg font-black text-gray-300 w-6 text-center">{idx + 1}</span>
@@ -1097,12 +1086,23 @@ export default function App() {
               </div>
             </div>
 
-            {/* TMDB Detail Modal */}
-            <TMDBDetailModal
-              item={tmdbSelectedMovie}
-              getImageUrl={getTmdbImageUrl}
-              onClose={() => setTmdbSelectedMovie(null)}
-            />
+            {/* TMDB Detail Page */}
+            {detailPageItem && (
+              <TMDBDetailPage
+                item={detailPageItem}
+                getImageUrl={getTmdbImageUrl}
+                onBack={() => setDetailPageItem(null)}
+                onPlay={(item) => {
+                  if (!currentUser) {
+                    navigateTo('#/login');
+                    showToast('请先登录后再观看影片', 'error');
+                  } else {
+                    setTmdbSelectedMovie(item);
+                    navigateTo('#/detail');
+                  }
+                }}
+              />
+            )}
           </div>
         )}
 
@@ -1157,7 +1157,7 @@ export default function App() {
                 .map((item) => (
                   <div
                     key={item.id}
-                    onClick={() => setTmdbSelectedMovie(item)}
+                    onClick={() => { setDetailPageItem(item); navigateTo('#/detail'); }}
                     className="group cursor-pointer"
                   >
                     <div className="relative aspect-[2/3] bg-gray-200 rounded-xl overflow-hidden shadow-md mb-2">
@@ -1181,12 +1181,22 @@ export default function App() {
                 ))}
             </div>
 
-            {/* TMDB Detail Modal */}
-            <TMDBDetailModal
-              item={tmdbSelectedMovie}
-              getImageUrl={getTmdbImageUrl}
-              onClose={() => setTmdbSelectedMovie(null)}
-            />
+            {/* TMDB Detail Page */}
+            {detailPageItem && (
+              <TMDBDetailPage
+                item={detailPageItem}
+                getImageUrl={getTmdbImageUrl}
+                onBack={() => setDetailPageItem(null)}
+                onPlay={(item) => {
+                  if (!currentUser) {
+                    navigateTo('#/login');
+                    showToast('请先登录后再观看影片', 'error');
+                  } else {
+                    setTmdbSelectedMovie(item);
+                  }
+                }}
+              />
+            )}
           </div>
         )}
 

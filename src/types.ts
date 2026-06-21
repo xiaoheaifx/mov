@@ -65,22 +65,34 @@ export interface TMDBMovieDetail {
   title?: string;
   name?: string;
   overview: string;
+  tagline?: string;
   poster_path: string | null;
   backdrop_path: string | null;
   vote_average: number;
+  vote_count?: number;
   release_date?: string;
   first_air_date?: string;
-  genres: Array<{ id: number; name: string }>;
+  status?: string;
   runtime?: number;
   number_of_seasons?: number;
+  number_of_episodes?: number;
+  budget?: number;
+  revenue?: number;
+  genres: Array<{ id: number; name: string }>;
+  production_companies?: Array<{ id: number; name: string; logo_path: string | null }>;
+  production_countries?: Array<{ iso_3166_1: string; name: string }>;
+  spoken_languages?: Array<{ iso_639_1: string; name: string }>;
   credits?: {
-    cast: Array<{ id: number; name: string; character: string; profile_path: string | null }>;
-    crew: Array<{ id: number; name: string; job: string; profile_path: string | null }>;
+    cast: Array<{ id: number; name: string; character: string; profile_path: string | null; order?: number }>;
+    crew: Array<{ id: number; name: string; job: string; department?: string; profile_path: string | null }>;
   };
   videos?: {
     results: Array<{ id: string; key: string; name: string; site: string; type: string }>;
   };
   similar?: {
+    results: TMDBMovie[];
+  };
+  recommendations?: {
     results: TMDBMovie[];
   };
 }
