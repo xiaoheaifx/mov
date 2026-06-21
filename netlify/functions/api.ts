@@ -32,6 +32,9 @@ const TMDB_API_KEY = process.env.TMDB_API_KEY || '';
 const TMDB_BASE_URL = 'https://api.themoviedb.org/3';
 
 async function tmdbFetch(endpoint: string, params: Record<string, string> = {}): Promise<any> {
+  if (!TMDB_API_KEY) {
+    throw new Error('TMDB_API_KEY 环境变量未设置。请在 Netlify 环境变量中配置有效的 TMDB API Key。');
+  }
   const url = new URL(`${TMDB_BASE_URL}${endpoint}`);
   url.searchParams.set('api_key', TMDB_API_KEY);
   url.searchParams.set('language', 'zh-CN');
@@ -596,43 +599,67 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
     // ==========================================
     
     if (path === '/tmdb/trending' && method === 'GET') {
-      const mediaType = (event.queryStringParameters?.media_type as string) || 'all';
-      const timeWindow = (event.queryStringParameters?.time_window as string) || 'week';
-      const page = (event.queryStringParameters?.page as string) || '1';
-      const data = await tmdbFetch(`/trending/${mediaType}/${timeWindow}`, { page });
-      return { statusCode: 200, body: JSON.stringify(data) };
+      try {
+        const mediaType = (event.queryStringParameters?.media_type as string) || 'all';
+        const timeWindow = (event.queryStringParameters?.time_window as string) || 'week';
+        const page = (event.queryStringParameters?.page as string) || '1';
+        const data = await tmdbFetch(`/trending/${mediaType}/${timeWindow}`, { page });
+        return { statusCode: 200, body: JSON.stringify(data) };
+      } catch (e: any) {
+        return { statusCode: 200, body: JSON.stringify({ results: [], error: e.message }) };
+      }
     }
 
     if (path === '/tmdb/movie/now_playing' && method === 'GET') {
-      const page = (event.queryStringParameters?.page as string) || '1';
-      const data = await tmdbFetch('/movie/now_playing', { page });
-      return { statusCode: 200, body: JSON.stringify(data) };
+      try {
+        const page = (event.queryStringParameters?.page as string) || '1';
+        const data = await tmdbFetch('/movie/now_playing', { page });
+        return { statusCode: 200, body: JSON.stringify(data) };
+      } catch (e: any) {
+        return { statusCode: 200, body: JSON.stringify({ results: [], error: e.message }) };
+      }
     }
 
     if (path === '/tmdb/movie/popular' && method === 'GET') {
-      const page = (event.queryStringParameters?.page as string) || '1';
-      const data = await tmdbFetch('/movie/popular', { page });
-      return { statusCode: 200, body: JSON.stringify(data) };
+      try {
+        const page = (event.queryStringParameters?.page as string) || '1';
+        const data = await tmdbFetch('/movie/popular', { page });
+        return { statusCode: 200, body: JSON.stringify(data) };
+      } catch (e: any) {
+        return { statusCode: 200, body: JSON.stringify({ results: [], error: e.message }) };
+      }
     }
 
     if (path === '/tmdb/tv/popular' && method === 'GET') {
-      const page = (event.queryStringParameters?.page as string) || '1';
-      const data = await tmdbFetch('/tv/popular', { page });
-      return { statusCode: 200, body: JSON.stringify(data) };
+      try {
+        const page = (event.queryStringParameters?.page as string) || '1';
+        const data = await tmdbFetch('/tv/popular', { page });
+        return { statusCode: 200, body: JSON.stringify(data) };
+      } catch (e: any) {
+        return { statusCode: 200, body: JSON.stringify({ results: [], error: e.message }) };
+      }
     }
 
     if (path === '/tmdb/tv/top_rated' && method === 'GET') {
-      const page = (event.queryStringParameters?.page as string) || '1';
-      const data = await tmdbFetch('/tv/top_rated', { page });
-      return { statusCode: 200, body: JSON.stringify(data) };
+      try {
+        const page = (event.queryStringParameters?.page as string) || '1';
+        const data = await tmdbFetch('/tv/top_rated', { page });
+        return { statusCode: 200, body: JSON.stringify(data) };
+      } catch (e: any) {
+        return { statusCode: 200, body: JSON.stringify({ results: [], error: e.message }) };
+      }
     }
 
     if (path === '/tmdb/search' && method === 'GET') {
-      const query = event.queryStringParameters?.query as string;
-      const page = (event.queryStringParameters?.page as string) || '1';
-      if (!query) return { statusCode: 400, body: JSON.stringify({ error: '请提供搜索关键词' }) };
-      const data = await tmdbFetch('/search/multi', { query, page });
-      return { statusCode: 200, body: JSON.stringify(data) };
+      try {
+        const query = event.queryStringParameters?.query as string;
+        const page = (event.queryStringParameters?.page as string) || '1';
+        if (!query) return { statusCode: 400, body: JSON.stringify({ error: '请提供搜索关键词' }) };
+        const data = await tmdbFetch('/search/multi', { query, page });
+        return { statusCode: 200, body: JSON.stringify(data) };
+      } catch (e: any) {
+        return { statusCode: 200, body: JSON.stringify({ results: [], error: e.message }) };
+      }
     }
 
     // ==========================================

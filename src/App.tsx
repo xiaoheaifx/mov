@@ -788,8 +788,8 @@ export default function App() {
         {currentRoute === 'home' && (
           <div id="route-home" className="animate-fade-in">
 
-            {/* Hero Banner */}
-            {tmdbTrending.length > 0 && !tmdbTrendingLoading && (
+            {/* Hero Banner - TMDB or Fallback */}
+            {!tmdbTrendingLoading && tmdbTrending.length > 0 ? (
               <div className="relative w-full h-[60vh] min-h-[400px] overflow-hidden">
                 <img
                   src={getTmdbImageUrl(tmdbTrending[0].backdrop_path, 'w1280')}
@@ -829,155 +829,253 @@ export default function App() {
                   </div>
                 </div>
               </div>
+            ) : (
+              <div className="relative w-full h-[50vh] min-h-[350px] overflow-hidden bg-gradient-to-br from-red-700 via-red-600 to-orange-500">
+                <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/30 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#f5f5f5] via-transparent to-transparent" />
+                <div className="absolute bottom-16 left-8 sm:left-12 lg:left-16 max-w-lg">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="px-2.5 py-0.5 bg-white/20 text-white text-xs font-bold rounded-md backdrop-blur-sm">小何影视</span>
+                    <span className="text-white/70 text-sm">欢迎回来</span>
+                  </div>
+                  <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white mb-3 leading-tight">
+                    发现精彩影视
+                  </h1>
+                  <p className="text-white/80 text-sm sm:text-base line-clamp-2 mb-5 leading-relaxed">
+                    {tmdbTrendingLoading ? '正在加载推荐内容...' : '浏览片库中的精选影片，享受极速观影体验。'}
+                  </p>
+                  <div className="flex items-center gap-3">
+                    {movies.length > 0 && (
+                      <button
+                        onClick={() => {
+                          const firstMovie = movies[0];
+                          if (firstMovie) navigateTo(`#/movie/${firstMovie.id}`);
+                        }}
+                        className="flex items-center gap-2 px-6 sm:px-8 py-2.5 sm:py-3 bg-white text-red-600 font-bold rounded-lg hover:bg-gray-100 transition-all text-sm sm:text-base shadow-lg"
+                      >
+                        <Play className="w-5 h-5 fill-red-600" /> 开始观影
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
             )}
 
             {/* Loading State */}
-            {tmdbTrendingLoading && (
+            {tmdbTrendingLoading && tmdbTrending.length === 0 && (
               <div className="w-full h-[60vh] min-h-[400px] bg-gray-200 animate-pulse" />
             )}
 
             {/* Main Content + Right Sidebar */}
-            <div className="relative z-10 -mt-16 pb-16">
+            <div className="relative z-10 pb-16">
               <div className="flex gap-8 px-8 sm:px-12 lg:px-16">
                 
                 {/* Left Main Content */}
                 <div className="flex-1 min-w-0 space-y-8 sm:space-y-12">
 
-                  {/* Now Playing */}
-                  <div>
-                    <h2 className="text-lg sm:text-xl font-bold text-neutral-900 mb-3 sm:mb-4">正在热映</h2>
-                    <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 scrollbar-hide">
-                      {tmdbNowPlayingLoading ? (
-                        Array.from({ length: 6 }).map((_, i) => (
-                          <div key={i} className="flex-shrink-0 w-[130px] sm:w-[160px] aspect-[2/3] bg-gray-200 rounded-lg animate-pulse" />
-                        ))
-                      ) : (
-                        tmdbNowPlaying.slice(0, 12).map((item) => (
-                          <div
-                            key={item.id}
-                            onClick={() => setTmdbSelectedMovie(item)}
-                            className="flex-shrink-0 w-[130px] sm:w-[160px] group cursor-pointer"
-                          >
-                            <div className="relative aspect-[2/3] bg-gray-200 rounded-lg overflow-hidden shadow-md">
-                              <img
-                                src={getTmdbImageUrl(item.poster_path, 'w300')}
-                                alt={item.title || item.name}
-                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                loading="lazy"
-                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                              />
-                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
-                                <Play className="w-10 h-10 text-white fill-white opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100" />
+                  {/* 片库精选 - Custom Movies from Database */}
+                  {movies.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-3 sm:mb-4">
+                        <div className="flex items-center gap-2.5">
+                          <Flame className="w-5 h-5 text-red-500" />
+                          <h2 className="text-lg sm:text-xl font-bold text-neutral-900">片库精选</h2>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        {moviesLoading ? (
+                          Array.from({ length: 5 }).map((_, i) => (
+                            <div key={i} className="aspect-[16/10] bg-gray-200 rounded-xl animate-pulse" />
+                          ))
+                        ) : (
+                          movies.map((movie) => (
+                            <div
+                              key={movie.id}
+                              onClick={() => navigateTo(`#/movie/${movie.id}`)}
+                              className="group cursor-pointer"
+                            >
+                              <div className="relative aspect-[16/10] bg-gray-200 rounded-xl overflow-hidden shadow-md mb-2">
+                                <img
+                                  src={movie.coverUrl}
+                                  alt={movie.title}
+                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                  loading="lazy"
+                                  referrerPolicy="no-referrer"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
+                                  <Play className="w-10 h-10 text-white fill-white opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100" />
+                                </div>
+                                <span className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm text-neutral-700 text-[10px] font-semibold px-2 py-0.5 rounded-md">
+                                  {movie.genre}
+                                </span>
                               </div>
+                              <p className="text-sm font-semibold text-neutral-900 truncate group-hover:text-red-600 transition-colors">{movie.title}</p>
+                              <p className="text-xs text-gray-400 mt-0.5">{movie.duration}</p>
                             </div>
-                            <p className="text-xs text-gray-600 mt-2 truncate group-hover:text-neutral-900 transition-colors">{item.title || item.name}</p>
-                          </div>
-                        ))
-                      )}
+                          ))
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {/* Now Playing */}
+                  {tmdbNowPlaying.length > 0 && (
+                    <div>
+                      <h2 className="text-lg sm:text-xl font-bold text-neutral-900 mb-3 sm:mb-4">正在热映</h2>
+                      <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 scrollbar-hide">
+                        {tmdbNowPlayingLoading ? (
+                          Array.from({ length: 6 }).map((_, i) => (
+                            <div key={i} className="flex-shrink-0 w-[130px] sm:w-[160px] aspect-[2/3] bg-gray-200 rounded-lg animate-pulse" />
+                          ))
+                        ) : (
+                          tmdbNowPlaying.slice(0, 12).map((item) => (
+                            <div
+                              key={item.id}
+                              onClick={() => setTmdbSelectedMovie(item)}
+                              className="flex-shrink-0 w-[130px] sm:w-[160px] group cursor-pointer"
+                            >
+                              <div className="relative aspect-[2/3] bg-gray-200 rounded-lg overflow-hidden shadow-md">
+                                <img
+                                  src={getTmdbImageUrl(item.poster_path, 'w300')}
+                                  alt={item.title || item.name}
+                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                  loading="lazy"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
+                                  <Play className="w-10 h-10 text-white fill-white opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100" />
+                                </div>
+                              </div>
+                              <p className="text-xs text-gray-600 mt-2 truncate group-hover:text-neutral-900 transition-colors">{item.title || item.name}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Popular Movies */}
-                  <div>
-                    <h2 className="text-lg sm:text-xl font-bold text-neutral-900 mb-3 sm:mb-4">热门电影</h2>
-                    <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 scrollbar-hide">
-                      {tmdbPopularLoading ? (
-                        Array.from({ length: 6 }).map((_, i) => (
-                          <div key={i} className="flex-shrink-0 w-[130px] sm:w-[160px] aspect-[2/3] bg-gray-200 rounded-lg animate-pulse" />
-                        ))
-                      ) : (
-                        tmdbPopular.slice(0, 12).map((item) => (
-                          <div
-                            key={item.id}
-                            onClick={() => setTmdbSelectedMovie(item)}
-                            className="flex-shrink-0 w-[130px] sm:w-[160px] group cursor-pointer"
-                          >
-                            <div className="relative aspect-[2/3] bg-gray-200 rounded-lg overflow-hidden shadow-md">
-                              <img
-                                src={getTmdbImageUrl(item.poster_path, 'w300')}
-                                alt={item.title || item.name}
-                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                loading="lazy"
-                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                              />
-                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
-                                <Play className="w-10 h-10 text-white fill-white opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100" />
+                  {tmdbPopular.length > 0 && (
+                    <div>
+                      <h2 className="text-lg sm:text-xl font-bold text-neutral-900 mb-3 sm:mb-4">热门电影</h2>
+                      <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 scrollbar-hide">
+                        {tmdbPopularLoading ? (
+                          Array.from({ length: 6 }).map((_, i) => (
+                            <div key={i} className="flex-shrink-0 w-[130px] sm:w-[160px] aspect-[2/3] bg-gray-200 rounded-lg animate-pulse" />
+                          ))
+                        ) : (
+                          tmdbPopular.slice(0, 12).map((item) => (
+                            <div
+                              key={item.id}
+                              onClick={() => setTmdbSelectedMovie(item)}
+                              className="flex-shrink-0 w-[130px] sm:w-[160px] group cursor-pointer"
+                            >
+                              <div className="relative aspect-[2/3] bg-gray-200 rounded-lg overflow-hidden shadow-md">
+                                <img
+                                  src={getTmdbImageUrl(item.poster_path, 'w300')}
+                                  alt={item.title || item.name}
+                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                  loading="lazy"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
+                                  <Play className="w-10 h-10 text-white fill-white opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100" />
+                                </div>
                               </div>
+                              <p className="text-xs text-gray-600 mt-2 truncate group-hover:text-neutral-900 transition-colors">{item.title || item.name}</p>
                             </div>
-                            <p className="text-xs text-gray-600 mt-2 truncate group-hover:text-neutral-900 transition-colors">{item.title || item.name}</p>
-                          </div>
-                        ))
-                      )}
+                          ))
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Popular TV */}
-                  <div>
-                    <h2 className="text-lg sm:text-xl font-bold text-neutral-900 mb-3 sm:mb-4">热门剧集</h2>
-                    <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 scrollbar-hide">
-                      {tmdbTvPopularLoading ? (
-                        Array.from({ length: 6 }).map((_, i) => (
-                          <div key={i} className="flex-shrink-0 w-[130px] sm:w-[160px] aspect-[2/3] bg-gray-200 rounded-lg animate-pulse" />
-                        ))
-                      ) : (
-                        tmdbTvPopular.slice(0, 12).map((item) => (
-                          <div
-                            key={item.id}
-                            onClick={() => setTmdbSelectedMovie(item)}
-                            className="flex-shrink-0 w-[130px] sm:w-[160px] group cursor-pointer"
-                          >
-                            <div className="relative aspect-[2/3] bg-gray-200 rounded-lg overflow-hidden shadow-md">
-                              <img
-                                src={getTmdbImageUrl(item.poster_path, 'w300')}
-                                alt={item.title || item.name}
-                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                loading="lazy"
-                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                              />
-                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
-                                <Play className="w-10 h-10 text-white fill-white opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100" />
+                  {tmdbTvPopular.length > 0 && (
+                    <div>
+                      <h2 className="text-lg sm:text-xl font-bold text-neutral-900 mb-3 sm:mb-4">热门剧集</h2>
+                      <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 scrollbar-hide">
+                        {tmdbTvPopularLoading ? (
+                          Array.from({ length: 6 }).map((_, i) => (
+                            <div key={i} className="flex-shrink-0 w-[130px] sm:w-[160px] aspect-[2/3] bg-gray-200 rounded-lg animate-pulse" />
+                          ))
+                        ) : (
+                          tmdbTvPopular.slice(0, 12).map((item) => (
+                            <div
+                              key={item.id}
+                              onClick={() => setTmdbSelectedMovie(item)}
+                              className="flex-shrink-0 w-[130px] sm:w-[160px] group cursor-pointer"
+                            >
+                              <div className="relative aspect-[2/3] bg-gray-200 rounded-lg overflow-hidden shadow-md">
+                                <img
+                                  src={getTmdbImageUrl(item.poster_path, 'w300')}
+                                  alt={item.title || item.name}
+                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                  loading="lazy"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
+                                  <Play className="w-10 h-10 text-white fill-white opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100" />
+                                </div>
                               </div>
+                              <p className="text-xs text-gray-600 mt-2 truncate group-hover:text-neutral-900 transition-colors">{item.title || item.name}</p>
                             </div>
-                            <p className="text-xs text-gray-600 mt-2 truncate group-hover:text-neutral-900 transition-colors">{item.title || item.name}</p>
-                          </div>
-                        ))
-                      )}
+                          ))
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Top Rated TV */}
-                  <div>
-                    <h2 className="text-lg sm:text-xl font-bold text-neutral-900 mb-3 sm:mb-4">高分推荐</h2>
-                    <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 scrollbar-hide">
-                      {tmdbTvTopRatedLoading ? (
-                        Array.from({ length: 6 }).map((_, i) => (
-                          <div key={i} className="flex-shrink-0 w-[130px] sm:w-[160px] aspect-[2/3] bg-gray-200 rounded-lg animate-pulse" />
-                        ))
-                      ) : (
-                        tmdbTvTopRated.slice(0, 12).map((item) => (
-                          <div
-                            key={item.id}
-                            onClick={() => setTmdbSelectedMovie(item)}
-                            className="flex-shrink-0 w-[130px] sm:w-[160px] group cursor-pointer"
-                          >
-                            <div className="relative aspect-[2/3] bg-gray-200 rounded-lg overflow-hidden shadow-md">
-                              <img
-                                src={getTmdbImageUrl(item.poster_path, 'w300')}
-                                alt={item.title || item.name}
-                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                                loading="lazy"
-                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                              />
-                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
-                                <Play className="w-10 h-10 text-white fill-white opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100" />
+                  {tmdbTvTopRated.length > 0 && (
+                    <div>
+                      <h2 className="text-lg sm:text-xl font-bold text-neutral-900 mb-3 sm:mb-4">高分推荐</h2>
+                      <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-4 scrollbar-hide">
+                        {tmdbTvTopRatedLoading ? (
+                          Array.from({ length: 6 }).map((_, i) => (
+                            <div key={i} className="flex-shrink-0 w-[130px] sm:w-[160px] aspect-[2/3] bg-gray-200 rounded-lg animate-pulse" />
+                          ))
+                        ) : (
+                          tmdbTvTopRated.slice(0, 12).map((item) => (
+                            <div
+                              key={item.id}
+                              onClick={() => setTmdbSelectedMovie(item)}
+                              className="flex-shrink-0 w-[130px] sm:w-[160px] group cursor-pointer"
+                            >
+                              <div className="relative aspect-[2/3] bg-gray-200 rounded-lg overflow-hidden shadow-md">
+                                <img
+                                  src={getTmdbImageUrl(item.poster_path, 'w300')}
+                                  alt={item.title || item.name}
+                                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
+                                  loading="lazy"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
+                                  <Play className="w-10 h-10 text-white fill-white opacity-0 group-hover:opacity-100 transition-all scale-75 group-hover:scale-100" />
+                                </div>
                               </div>
+                              <p className="text-xs text-gray-600 mt-2 truncate group-hover:text-neutral-900 transition-colors">{item.title || item.name}</p>
                             </div>
-                            <p className="text-xs text-gray-600 mt-2 truncate group-hover:text-neutral-900 transition-colors">{item.title || item.name}</p>
-                          </div>
-                        ))
-                      )}
+                          ))
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {/* TMDB Data Unavailable Notice */}
+                  {!tmdbTrendingLoading && tmdbTrending.length === 0 && tmdbPopular.length === 0 && tmdbNowPlaying.length === 0 && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 text-center">
+                      <AlertCircle className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+                      <h3 className="text-lg font-bold text-amber-800 mb-2">TMDB 数据暂未加载</h3>
+                      <p className="text-sm text-amber-600">
+                        TMDB 电影数据需要配置有效的 API Key。请在 Netlify 环境变量中设置 <code className="bg-amber-100 px-1.5 py-0.5 rounded text-amber-800 font-mono text-xs">TMDB_API_KEY</code>。
+                      </p>
+                      <p className="text-xs text-amber-500 mt-2">
+                        免费申请地址：<a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener noreferrer" className="underline">themoviedb.org/settings/api</a>
+                      </p>
+                    </div>
+                  )}
 
                 </div>
 
@@ -985,70 +1083,100 @@ export default function App() {
                 <aside className="hidden xl:block w-72 flex-shrink-0 space-y-6">
                   
                   {/* Most Watched */}
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                    <h3 className="text-base font-bold text-neutral-900 mb-3 flex items-center gap-2">
-                      <Flame className="w-4 h-4 text-red-500" /> 最多观看
-                    </h3>
-                    <div className="space-y-3">
-                      {tmdbPopular.slice(0, 5).map((item, idx) => (
-                        <div
-                          key={item.id}
-                          onClick={() => setTmdbSelectedMovie(item)}
-                          className="flex gap-3 cursor-pointer group"
-                        >
-                          <span className="text-lg font-black text-gray-300 w-6 text-center">{idx + 1}</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-neutral-900 truncate group-hover:text-red-600 transition-colors">{item.title || item.name}</p>
-                            <p className="text-xs text-gray-400">{(item.release_date || item.first_air_date || '').split('-')[0]}</p>
+                  {tmdbPopular.length > 0 && (
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                      <h3 className="text-base font-bold text-neutral-900 mb-3 flex items-center gap-2">
+                        <Flame className="w-4 h-4 text-red-500" /> 最多观看
+                      </h3>
+                      <div className="space-y-3">
+                        {tmdbPopular.slice(0, 5).map((item, idx) => (
+                          <div
+                            key={item.id}
+                            onClick={() => setTmdbSelectedMovie(item)}
+                            className="flex gap-3 cursor-pointer group"
+                          >
+                            <span className="text-lg font-black text-gray-300 w-6 text-center">{idx + 1}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-neutral-900 truncate group-hover:text-red-600 transition-colors">{item.title || item.name}</p>
+                              <p className="text-xs text-gray-400">{(item.release_date || item.first_air_date || '').split('-')[0]}</p>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Recently Updated */}
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                    <h3 className="text-base font-bold text-neutral-900 mb-3 flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-blue-500" /> 最近更新
-                    </h3>
-                    <div className="space-y-3">
-                      {tmdbNowPlaying.slice(0, 5).map((item, idx) => (
-                        <div
-                          key={item.id}
-                          onClick={() => setTmdbSelectedMovie(item)}
-                          className="flex gap-3 cursor-pointer group"
-                        >
-                          <span className="text-lg font-black text-gray-300 w-6 text-center">{idx + 1}</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-neutral-900 truncate group-hover:text-blue-600 transition-colors">{item.title || item.name}</p>
-                            <p className="text-xs text-gray-400">{(item.release_date || item.first_air_date || '').split('-')[0]}</p>
+                  {tmdbNowPlaying.length > 0 && (
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                      <h3 className="text-base font-bold text-neutral-900 mb-3 flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-blue-500" /> 最近更新
+                      </h3>
+                      <div className="space-y-3">
+                        {tmdbNowPlaying.slice(0, 5).map((item, idx) => (
+                          <div
+                            key={item.id}
+                            onClick={() => setTmdbSelectedMovie(item)}
+                            className="flex gap-3 cursor-pointer group"
+                          >
+                            <span className="text-lg font-black text-gray-300 w-6 text-center">{idx + 1}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-neutral-900 truncate group-hover:text-blue-600 transition-colors">{item.title || item.name}</p>
+                              <p className="text-xs text-gray-400">{(item.release_date || item.first_air_date || '').split('-')[0]}</p>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Top Rated */}
-                  <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-                    <h3 className="text-base font-bold text-neutral-900 mb-3 flex items-center gap-2">
-                      <Star className="w-4 h-4 text-yellow-500" /> 高分排行
-                    </h3>
-                    <div className="space-y-3">
-                      {tmdbTvTopRated.slice(0, 5).map((item, idx) => (
-                        <div
-                          key={item.id}
-                          onClick={() => setTmdbSelectedMovie(item)}
-                          className="flex gap-3 cursor-pointer group"
-                        >
-                          <span className="text-lg font-black text-gray-300 w-6 text-center">{idx + 1}</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-neutral-900 truncate group-hover:text-yellow-600 transition-colors">{item.title || item.name}</p>
-                            <p className="text-xs text-gray-400">⭐ {item.vote_average?.toFixed(1)}</p>
+                  {tmdbTvTopRated.length > 0 && (
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                      <h3 className="text-base font-bold text-neutral-900 mb-3 flex items-center gap-2">
+                        <Star className="w-4 h-4 text-yellow-500" /> 高分排行
+                      </h3>
+                      <div className="space-y-3">
+                        {tmdbTvTopRated.slice(0, 5).map((item, idx) => (
+                          <div
+                            key={item.id}
+                            onClick={() => setTmdbSelectedMovie(item)}
+                            className="flex gap-3 cursor-pointer group"
+                          >
+                            <span className="text-lg font-black text-gray-300 w-6 text-center">{idx + 1}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-neutral-900 truncate group-hover:text-yellow-600 transition-colors">{item.title || item.name}</p>
+                              <p className="text-xs text-gray-400">⭐ {item.vote_average?.toFixed(1)}</p>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
+
+                  {/* 片库影片 sidebar */}
+                  {movies.length > 0 && (
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                      <h3 className="text-base font-bold text-neutral-900 mb-3 flex items-center gap-2">
+                        <Film className="w-4 h-4 text-green-500" /> 片库影片
+                      </h3>
+                      <div className="space-y-3">
+                        {movies.slice(0, 5).map((item, idx) => (
+                          <div
+                            key={item.id}
+                            onClick={() => navigateTo(`#/movie/${item.id}`)}
+                            className="flex gap-3 cursor-pointer group"
+                          >
+                            <span className="text-lg font-black text-gray-300 w-6 text-center">{idx + 1}</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-neutral-900 truncate group-hover:text-green-600 transition-colors">{item.title}</p>
+                              <p className="text-xs text-gray-400">{item.genre}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                 </aside>
 

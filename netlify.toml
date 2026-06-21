@@ -30,4 +30,4 @@
 [template.environment]
   ADMIN_USERNAME = "xiaohe"
   ADMIN_PASSWORD = "xiaohe@5200"
-  TMDB_API_KEY = "Your TMDB API Key here"
+  TMDB_API_KEY = ""

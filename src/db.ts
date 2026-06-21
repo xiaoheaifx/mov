@@ -109,8 +109,28 @@ let localDBCache: LocalDBStructure = {
   movies: INITIAL_MOVIES
 };
 
+// Seed the admin account in memory (always, even on Netlify)
+function seedAdminAccount() {
+  const adminUsername = process.env.ADMIN_USERNAME || 'xiaohe';
+  let adminHash = process.env.ADMIN_PASSWORD_HASH;
+  if (!adminHash) {
+    const plainPassword = process.env.ADMIN_PASSWORD || 'xiaohe@5200';
+    const salt = bcrypt.genSaltSync(10);
+    adminHash = bcrypt.hashSync(plainPassword, salt);
+  }
+  localDBCache.admins[adminUsername] = {
+    username: adminUsername,
+    passwordHash: adminHash,
+    role: 'admin',
+    createdAt: new Date().toISOString()
+  };
+}
+
 // Ensure data folder and file exist for local fallback
 function initLocalDB() {
+  // Always seed the admin account in memory, even on Netlify
+  seedAdminAccount();
+
   // Skip local file operations on Netlify (read-only filesystem)
   if (isNetlify()) {
     return;
@@ -124,16 +144,6 @@ function initLocalDB() {
   } catch (e) {
     // Silently fail on read-only filesystems
     return;
-  }
-  
-  // Seed the default administrative password hash if env variable doesn't provide it
-  const adminUsername = process.env.ADMIN_USERNAME || 'xiaohe';
-  let adminHash = process.env.ADMIN_PASSWORD_HASH;
-  if (!adminHash) {
-    // Support ADMIN_PASSWORD (plain text) or fallback to default
-    const plainPassword = process.env.ADMIN_PASSWORD || 'xiaohe@5200';
-    const salt = bcrypt.genSaltSync(10);
-    adminHash = bcrypt.hashSync(plainPassword, salt);
   }
   
   if (fs.existsSync(LOCAL_DB_PATH)) {
@@ -150,14 +160,6 @@ function initLocalDB() {
       console.error('Error reading local db file, resetting to basic defaults.', e);
     }
   }
-  
-  // Always ensure the preset superadmin is added is the admin list
-  localDBCache.admins[adminUsername] = {
-    username: adminUsername,
-    passwordHash: adminHash,
-    role: 'admin',
-    createdAt: new Date().toISOString()
-  };
   
   saveLocalDB();
 }
