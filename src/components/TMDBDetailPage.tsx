@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Star, Play, Calendar, Clock, Film, Tv, Users, Globe, DollarSign, Building2, Award, ArrowLeft, Tag, Languages, Loader2, MonitorPlay, List } from 'lucide-react';
+import { Star, Play, Calendar, Clock, Film, Tv, Users, Globe, DollarSign, Building2, Award, ArrowLeft, Tag, Languages, Loader2, MonitorPlay, List, Volume2, ChevronRight } from 'lucide-react';
 import { TMDBMovie, TMDBMovieDetail, VideoSource, VideoSourcePlayLine, VideoSourceEpisode } from '../types.js';
+import VideoPlayer from './VideoPlayer.js';
 
 interface TMDBDetailPageProps {
   item: TMDBMovie;
   getImageUrl: (path: string | null, size?: string) => string;
   onBack: () => void;
-  onPlay: (item: TMDBMovie) => void;
 }
 
 function parsePlayLines(vodPlayFrom: string, vodPlayUrl: string): VideoSourcePlayLine[] {
@@ -29,13 +29,30 @@ function parsePlayLines(vodPlayFrom: string, vodPlayUrl: string): VideoSourcePla
   }).filter(line => line.episodes.length > 0);
 }
 
-export default function TMDBDetailPage({ item, getImageUrl, onBack, onPlay }: TMDBDetailPageProps) {
+function isDirectVideoUrl(url: string): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return lower.includes('.m3u8') || lower.includes('.mp4') || lower.includes('.flv') || lower.includes('.mkv') || lower.includes('.webm') || lower.includes('.mov');
+}
+
+function getQualityTag(name: string): { label: string; color: string } {
+  const n = name.toLowerCase();
+  if (n.includes('4k') || n.includes('ultra')) return { label: '4K', color: 'bg-purple-600' };
+  if (n.includes('1080') || n.includes('hd') || n.includes('蓝光') || n.includes('bluray')) return { label: 'HD', color: 'bg-blue-600' };
+  if (n.includes('720') || n.includes('抢先') || n.includes('ts') || n.includes('枪版') || n.includes('cam')) return { label: '抢先版', color: 'bg-orange-500' };
+  if (n.includes('正片') || n.includes('全集') || n.includes('完结')) return { label: '正片', color: 'bg-green-600' };
+  if (n.includes('预告') || n.includes('trailer')) return { label: '预告', color: 'bg-yellow-600' };
+  return { label: '', color: '' };
+}
+
+export default function TMDBDetailPage({ item, getImageUrl, onBack }: TMDBDetailPageProps) {
   const [detail, setDetail] = useState<TMDBMovieDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [playLines, setPlayLines] = useState<VideoSourcePlayLine[]>([]);
   const [selectedLine, setSelectedLine] = useState(0);
   const [selectedEpisode, setSelectedEpisode] = useState(0);
   const [currentUrl, setCurrentUrl] = useState<string>('');
+  const [currentEpName, setCurrentEpName] = useState<string>('');
   const [showPlayer, setShowPlayer] = useState(false);
   const [videoSources, setVideoSources] = useState<VideoSource[]>([]);
   const [searchingSources, setSearchingSources] = useState(false);
@@ -62,7 +79,6 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack, onPlay }: TM
     fetchDetail();
   }, [item]);
 
-  // Search video sources when detail is loaded
   useEffect(() => {
     if (!detail) return;
     const title = detail?.title || detail?.name || item.title || item.name || '';
@@ -74,7 +90,6 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack, onPlay }: TM
     setSearchingSources(true);
     setSourceResults([]);
     try {
-      // First get all video sources
       const vsRes = await fetch('/api/video-sources');
       if (!vsRes.ok) return;
       const sources: VideoSource[] = await vsRes.json();
@@ -82,28 +97,18 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack, onPlay }: TM
 
       if (sources.length === 0) return;
 
-      // Search each source for the keyword
       const results: Array<{ sourceName: string; sourceId: string; lines: VideoSourcePlayLine[] }> = [];
       
       for (const source of sources) {
         try {
-          const searchUrl = `${source.api}?ac=videolist&wd=${encodeURIComponent(keyword)}`;
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 10000);
-          const res = await fetch(searchUrl, { signal: controller.signal });
-          clearTimeout(timeout);
-          
-          if (!res.ok) continue;
-          const data = await res.json();
+          const searchRes = await fetch(`/api/video-sources/search?sourceId=${encodeURIComponent(source.id)}&wd=${encodeURIComponent(keyword)}`);
+          if (!searchRes.ok) continue;
+          const data = await searchRes.json();
           if (data.list && data.list.length > 0) {
-            // Get detail of the first result
             const firstItem = data.list[0];
             const vodId = firstItem.vod_id;
-            const detailUrl = source.detail
-              ? `${source.detail}?ac=videolist&ids=${vodId}`
-              : `${source.api}?ac=videolist&ids=${vodId}`;
             
-            const detailRes = await fetch(detailUrl);
+            const detailRes = await fetch(`/api/video-sources/detail?sourceId=${encodeURIComponent(source.id)}&ids=${vodId}`);
             if (detailRes.ok) {
               const detailData = await detailRes.json();
               if (detailData.list && detailData.list.length > 0) {
@@ -146,6 +151,7 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack, onPlay }: TM
       setSelectedLine(0);
       setSelectedEpisode(0);
       setCurrentUrl('');
+      setCurrentEpName('');
       setShowPlayer(false);
     }
   };
@@ -154,15 +160,17 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack, onPlay }: TM
     setSelectedLine(lineIndex);
     setSelectedEpisode(epIndex);
     const url = playLines[lineIndex]?.episodes[epIndex]?.url || '';
+    const name = playLines[lineIndex]?.episodes[epIndex]?.name || '';
     setCurrentUrl(url);
+    setCurrentEpName(name);
     setShowPlayer(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handlePlay = () => {
-    if (playLines.length > 0 && playLines[selectedLine].episodes.length > 0) {
-      handlePlayEpisode(selectedLine, 0);
-    } else {
-      onPlay(item);
+  const handlePlayNext = () => {
+    const episodes = playLines[selectedLine]?.episodes || [];
+    if (selectedEpisode < episodes.length - 1) {
+      handlePlayEpisode(selectedLine, selectedEpisode + 1);
     }
   };
 
@@ -200,9 +208,56 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack, onPlay }: TM
   const currentEpisodes = playLines[selectedLine]?.episodes || [];
 
   return (
-    <div className="fixed inset-0 z-50 bg-white dark:bg-slate-950 overflow-y-auto">
+    <div className="min-h-screen bg-white dark:bg-slate-950">
+      {/* Video Player Area */}
+      {showPlayer && currentUrl && (
+        <div className="bg-black">
+          <div className="max-w-6xl mx-auto">
+            {isDirectVideoUrl(currentUrl) ? (
+              <div className="aspect-video">
+                <VideoPlayer src={currentUrl} title={`${title} - ${currentEpName}`} />
+              </div>
+            ) : (
+              <div className="aspect-video">
+                <iframe
+                  src={currentUrl}
+                  className="w-full h-full"
+                  allowFullScreen
+                  allow="autoplay; encrypted-media; fullscreen"
+                  referrerPolicy="no-referrer"
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
+                />
+              </div>
+            )}
+            {/* Player info bar */}
+            <div className="flex items-center justify-between px-4 py-2 bg-neutral-900 text-white">
+              <div className="flex items-center gap-3">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                <span className="text-sm font-medium truncate">{title}</span>
+                {currentEpName && (
+                  <>
+                    <span className="text-neutral-500">-</span>
+                    <span className="text-sm text-blue-400">{currentEpName}</span>
+                  </>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedEpisode < currentEpisodes.length - 1 && (
+                  <button
+                    onClick={handlePlayNext}
+                    className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    下一集 <ChevronRight className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Backdrop header */}
-      <div className="relative h-[300px] sm:h-[400px] lg:h-[500px] overflow-hidden">
+      <div className={`relative overflow-hidden ${showPlayer ? 'h-48' : 'h-[300px] sm:h-[400px] lg:h-[500px]'}`}>
         <img
           src={backdropUrl}
           alt={title}
@@ -217,38 +272,10 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack, onPlay }: TM
         >
           <ArrowLeft className="w-4 h-4" /> 返回
         </button>
-
-        {/* Play button overlay */}
-        <div className="absolute bottom-6 left-6 z-10">
-          <button
-            onClick={handlePlay}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-full text-base font-bold transition-colors cursor-pointer shadow-lg shadow-blue-600/30"
-          >
-            <Play className="w-5 h-5 fill-white" /> 
-            {sourceResults.length > 0 ? '播放视频源' : '立即播放'}
-          </button>
-        </div>
       </div>
 
-      {/* Video Player */}
-      {showPlayer && currentUrl && (
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 -mt-8 relative z-20">
-          <div className="bg-black rounded-2xl overflow-hidden shadow-2xl mb-6">
-            <div className="aspect-video">
-              <iframe
-                src={currentUrl}
-                className="w-full h-full"
-                allowFullScreen
-                allow="autoplay; encrypted-media"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Content */}
-      <div className={`max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 ${showPlayer && currentUrl ? '-mt-0' : '-mt-32'} relative z-10`}>
+      <div className={`max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 ${showPlayer ? '-mt-16' : '-mt-32'} relative z-10`}>
         <div className="flex flex-col sm:flex-row gap-6 sm:gap-8">
           {/* Poster */}
           <div className="flex-shrink-0 mx-auto sm:mx-0">
@@ -328,85 +355,136 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack, onPlay }: TM
           </div>
         </div>
 
-        {/* Video Source Selector */}
-        {sourceResults.length > 0 && (
-          <div className="mt-6 bg-neutral-50 dark:bg-slate-900 rounded-2xl p-4 border border-neutral-200 dark:border-slate-800">
-            <h3 className="text-sm font-bold text-neutral-900 dark:text-white mb-3 flex items-center gap-2">
-              <MonitorPlay className="w-4 h-4 text-blue-500" /> 可用视频源 ({sourceResults.length})
-            </h3>
-            <div className="flex flex-wrap gap-2 mb-4">
-              {sourceResults.map(sr => (
-                <button
-                  key={sr.sourceId}
-                  onClick={() => switchSource(sr.sourceId)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                    activeSourceId === sr.sourceId
-                      ? 'bg-blue-600 text-white shadow-md'
-                      : 'bg-white dark:bg-slate-800 text-neutral-700 dark:text-slate-300 hover:bg-neutral-100 dark:hover:bg-slate-700 border border-neutral-200 dark:border-slate-700'
-                  }`}
-                >
-                  {sr.sourceName} ({sr.lines.length}线路)
-                </button>
-              ))}
+        {/* ==========================================
+            PLAY AREA - Source Selector + Episodes
+            ========================================== */}
+        <div className="mt-8">
+          {/* Searching indicator */}
+          {searchingSources && (
+            <div className="bg-neutral-50 dark:bg-slate-900 rounded-2xl p-8 border border-neutral-200 dark:border-slate-800 flex flex-col items-center justify-center gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+              <span className="text-sm text-neutral-500 dark:text-slate-400">正在搜索视频源，请稍候...</span>
             </div>
+          )}
 
-            {/* Play Lines */}
-            {playLines.length > 0 && (
-              <div className="space-y-3">
-                {/* Line tabs */}
-                {playLines.length > 1 && (
-                  <div className="flex flex-wrap gap-2">
-                    {playLines.map((line, li) => (
-                      <button
-                        key={li}
-                        onClick={() => { setSelectedLine(li); setSelectedEpisode(0); }}
-                        className={`px-3 py-1 rounded-lg text-xs font-medium transition-all cursor-pointer ${
-                          selectedLine === li
-                            ? 'bg-green-600 text-white'
-                            : 'bg-white dark:bg-slate-800 text-neutral-600 dark:text-slate-400 border border-neutral-200 dark:border-slate-700'
-                        }`}
-                      >
-                        {line.source}
-                      </button>
-                    ))}
-                  </div>
-                )}
+          {/* No sources found */}
+          {!searchingSources && sourceResults.length === 0 && videoSources.length === 0 && (
+            <div className="bg-amber-50 dark:bg-amber-950/30 rounded-2xl p-6 border border-amber-200 dark:border-amber-800 text-center">
+              <MonitorPlay className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+              <h3 className="text-lg font-bold text-amber-800 dark:text-amber-300 mb-2">暂无可用视频源</h3>
+              <p className="text-sm text-amber-600 dark:text-amber-400">
+                请先在管理后台添加个人视频源（支持CMS采集站API），添加后即可在此播放影片。
+              </p>
+            </div>
+          )}
 
-                {/* Episodes Grid */}
-                <div>
-                  <h4 className="text-xs font-bold text-neutral-500 dark:text-slate-400 mb-2 flex items-center gap-1">
-                    <List className="w-3.5 h-3.5" /> 
-                    {isTV ? '剧集列表' : '播放列表'} ({currentEpisodes.length})
-                  </h4>
-                  <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-1.5">
-                    {currentEpisodes.map((ep, ei) => (
-                      <button
-                        key={ei}
-                        onClick={() => handlePlayEpisode(selectedLine, ei)}
-                        className={`px-2 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer truncate ${
-                          selectedEpisode === ei && showPlayer
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-white dark:bg-slate-800 text-neutral-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-700 border border-neutral-200 dark:border-slate-700'
-                        }`}
-                        title={ep.name}
-                      >
-                        {ep.name}
-                      </button>
-                    ))}
-                  </div>
+          {/* Sources exist but no matches */}
+          {!searchingSources && sourceResults.length === 0 && videoSources.length > 0 && (
+            <div className="bg-blue-50 dark:bg-blue-950/30 rounded-2xl p-6 border border-blue-200 dark:border-blue-800 text-center">
+              <Film className="w-10 h-10 text-blue-500 mx-auto mb-3" />
+              <h3 className="text-lg font-bold text-blue-800 dark:text-blue-300 mb-2">未找到匹配资源</h3>
+              <p className="text-sm text-blue-600 dark:text-blue-400">
+                已搜索 {videoSources.length} 个视频源，但未找到本片资源。请尝试添加更多视频源。
+              </p>
+            </div>
+          )}
+
+          {/* Source results available */}
+          {sourceResults.length > 0 && (
+            <div className="bg-neutral-50 dark:bg-slate-900 rounded-2xl border border-neutral-200 dark:border-slate-800 overflow-hidden">
+              {/* Source tabs header */}
+              <div className="px-4 sm:px-6 py-4 border-b border-neutral-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+                <h3 className="text-base font-bold text-neutral-900 dark:text-white flex items-center gap-2 mb-3">
+                  <MonitorPlay className="w-5 h-5 text-blue-500" /> 播放源
+                  <span className="text-xs font-normal text-neutral-400">（共 {sourceResults.length} 个源可用）</span>
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {sourceResults.map(sr => (
+                    <button
+                      key={sr.sourceId}
+                      onClick={() => switchSource(sr.sourceId)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+                        activeSourceId === sr.sourceId
+                          ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                          : 'bg-neutral-100 dark:bg-slate-800 text-neutral-700 dark:text-slate-300 hover:bg-neutral-200 dark:hover:bg-slate-700 border border-neutral-200 dark:border-slate-700'
+                      }`}
+                    >
+                      {sr.sourceName}
+                      <span className="ml-1 text-xs opacity-70">({sr.lines.reduce((a, l) => a + l.episodes.length, 0)})</span>
+                    </button>
+                  ))}
                 </div>
               </div>
-            )}
-          </div>
-        )}
 
-        {/* Searching Sources Indicator */}
-        {searchingSources && (
-          <div className="mt-6 flex items-center justify-center gap-2 text-sm text-neutral-500 dark:text-slate-400">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            正在搜索视频源...
-          </div>
-        )}
+              {/* Line tabs + Episodes */}
+              {playLines.length > 0 && (
+                <div className="px-4 sm:px-6 py-4 space-y-4">
+                  {/* Line tabs */}
+                  {playLines.length > 1 && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Volume2 className="w-4 h-4 text-green-500" />
+                        <span className="text-sm font-bold text-neutral-700 dark:text-slate-300">线路选择</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {playLines.map((line, li) => (
+                          <button
+                            key={li}
+                            onClick={() => { setSelectedLine(li); setSelectedEpisode(0); setCurrentUrl(''); setShowPlayer(false); }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                              selectedLine === li
+                                ? 'bg-green-600 text-white shadow-sm'
+                                : 'bg-white dark:bg-slate-800 text-neutral-600 dark:text-slate-400 border border-neutral-200 dark:border-slate-700 hover:border-green-400'
+                            }`}
+                          >
+                            {line.source}
+                            <span className="ml-1 opacity-60">({line.episodes.length})</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Episodes Grid */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <List className="w-4 h-4 text-blue-500" />
+                      <span className="text-sm font-bold text-neutral-700 dark:text-slate-300">
+                        {isTV ? '选集播放' : '播放列表'}
+                      </span>
+                      <span className="text-xs text-neutral-400">共 {currentEpisodes.length} 集</span>
+                    </div>
+                    <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-2">
+                      {currentEpisodes.map((ep, ei) => {
+                        const qTag = getQualityTag(ep.name);
+                        const isActive = selectedEpisode === ei && showPlayer;
+                        return (
+                          <button
+                            key={ei}
+                            onClick={() => handlePlayEpisode(selectedLine, ei)}
+                            className={`relative px-2 py-2.5 rounded-lg text-xs font-medium transition-all cursor-pointer truncate group ${
+                              isActive
+                                ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                                : 'bg-white dark:bg-slate-800 text-neutral-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-slate-700 border border-neutral-200 dark:border-slate-700 hover:border-blue-400'
+                            }`}
+                            title={ep.name}
+                          >
+                            {qTag.label && (
+                              <span className={`absolute -top-1.5 -right-1 text-[8px] px-1 py-0 rounded text-white ${qTag.color} leading-tight`}>
+                                {qTag.label}
+                              </span>
+                            )}
+                            <span className="block truncate">{ep.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -477,52 +555,21 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack, onPlay }: TM
               </div>
             )}
 
-            {/* Production Companies */}
-            {companies.length > 0 && (
-              <div>
-                <h3 className="text-lg font-bold text-neutral-900 dark:text-white mb-3 flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-purple-500" /> 制作公司
-                </h3>
-                <div className="flex flex-wrap gap-4">
-                  {companies.map(c => (
-                    <div key={c.id} className="flex items-center gap-2 text-sm text-neutral-600 dark:text-slate-300">
-                      {c.logo_path && (
-                        <img src={getImageUrl(c.logo_path, 'w92')} alt={c.name} className="h-6 object-contain bg-neutral-100 dark:bg-slate-800 rounded px-1" />
-                      )}
-                      <span>{c.name}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Languages */}
-            {languages.length > 0 && (
-              <div>
-                <h3 className="text-lg font-bold text-neutral-900 dark:text-white mb-3 flex items-center gap-2">
-                  <Languages className="w-5 h-5 text-indigo-500" /> 语言
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {languages.map(l => (
-                    <span key={l.iso_639_1} className="px-3 py-1 bg-neutral-100 dark:bg-slate-800 text-neutral-600 dark:text-slate-300 rounded-full text-xs">
-                      {l.name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Trailer */}
             {trailer && (
               <div>
-                <a
-                  href={`https://www.youtube.com/watch?v=${trailer.key}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-sm font-medium transition-colors cursor-pointer"
-                >
-                  <Play className="w-4 h-4 fill-white" /> 观看预告片
-                </a>
+                <h3 className="text-lg font-bold text-neutral-900 dark:text-white mb-3 flex items-center gap-2">
+                  <Play className="w-5 h-5 text-red-500" /> 预告片
+                </h3>
+                <div className="aspect-video rounded-2xl overflow-hidden shadow-lg max-w-2xl">
+                  <iframe
+                    src={`https://www.youtube.com/embed/${trailer.key}`}
+                    className="w-full h-full"
+                    allowFullScreen
+                    allow="autoplay; encrypted-media"
+                    title="Trailer"
+                  />
+                </div>
               </div>
             )}
 
@@ -530,25 +577,57 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack, onPlay }: TM
             {similar.length > 0 && (
               <div>
                 <h3 className="text-lg font-bold text-neutral-900 dark:text-white mb-3 flex items-center gap-2">
-                  <Tag className="w-5 h-5 text-rose-500" /> 相似推荐
+                  <Film className="w-5 h-5 text-purple-500" /> 相似推荐
                 </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
                   {similar.map(s => (
                     <div key={s.id} className="group cursor-pointer">
-                      <img
-                        src={getImageUrl(s.poster_path, 'w185')}
-                        alt={s.title || s.name}
-                        className="w-full aspect-[2/3] rounded-lg object-cover mb-1.5 shadow-sm group-hover:shadow-md transition-shadow"
-                        loading="lazy"
-                      />
-                      <p className="text-xs text-neutral-700 dark:text-slate-300 line-clamp-1 group-hover:text-blue-500 transition-colors">
-                        {s.title || s.name}
-                      </p>
-                      {s.vote_average > 0 && (
-                        <p className="text-[10px] text-yellow-500">★ {s.vote_average.toFixed(1)}</p>
-                      )}
+                      <div className="aspect-[2/3] rounded-xl overflow-hidden bg-neutral-200 dark:bg-slate-800 mb-1">
+                        <img
+                          src={getImageUrl(s.poster_path, 'w342')}
+                          alt={s.title || s.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          loading="lazy"
+                        />
+                      </div>
+                      <p className="text-xs font-medium text-neutral-900 dark:text-white line-clamp-1">{s.title || s.name}</p>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Production Info */}
+            {(companies.length > 0 || budget || revenue) && (
+              <div>
+                <h3 className="text-lg font-bold text-neutral-900 dark:text-white mb-3 flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-cyan-500" /> 制作信息
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {companies.length > 0 && (
+                    <div>
+                      <span className="text-xs text-neutral-500 dark:text-slate-400">制作公司</span>
+                      <p className="text-sm font-medium text-neutral-900 dark:text-white">{companies.map(c => c.name).join(' / ')}</p>
+                    </div>
+                  )}
+                  {formatCurrency(budget) && (
+                    <div>
+                      <span className="text-xs text-neutral-500 dark:text-slate-400">预算</span>
+                      <p className="text-sm font-medium text-neutral-900 dark:text-white">{formatCurrency(budget)}</p>
+                    </div>
+                  )}
+                  {formatCurrency(revenue) && (
+                    <div>
+                      <span className="text-xs text-neutral-500 dark:text-slate-400">票房</span>
+                      <p className="text-sm font-medium text-neutral-900 dark:text-white">{formatCurrency(revenue)}</p>
+                    </div>
+                  )}
+                  {languages.length > 0 && (
+                    <div>
+                      <span className="text-xs text-neutral-500 dark:text-slate-400">语言</span>
+                      <p className="text-sm font-medium text-neutral-900 dark:text-white">{languages.map(l => l.name).join(' / ')}</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

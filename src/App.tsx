@@ -50,6 +50,105 @@ import TMDBDetailPage from './components/TMDBDetailPage.js';
 
 type PageRoute = 'home' | 'movie-detail' | 'detail' | 'viewer-login' | 'admin-login' | 'admin-dashboard' | 'tvbox-play' | 'movies' | 'tv' | 'anime' | 'variety';
 
+function TMDBDetailRoute({ tmdbId, getImageUrl, tmdbCache, onBack }: {
+  tmdbId: string;
+  getImageUrl: (path: string | null, size?: string) => string;
+  tmdbCache: Record<string, TMDBMovie>;
+  onBack: () => void;
+}) {
+  const [item, setItem] = useState<TMDBMovie | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!tmdbId) return;
+    
+    if (tmdbCache[tmdbId]) {
+      setItem(tmdbCache[tmdbId]);
+      setLoading(false);
+      return;
+    }
+
+    const fetchMovie = async () => {
+      setLoading(true);
+      try {
+        const movieRes = await fetch(`/api/tmdb/movie/${tmdbId}`);
+        if (movieRes.ok) {
+          const data = await movieRes.json();
+          setItem({
+            id: data.id,
+            title: data.title,
+            name: data.name,
+            overview: data.overview || '',
+            poster_path: data.poster_path,
+            backdrop_path: data.backdrop_path,
+            vote_average: data.vote_average || 0,
+            release_date: data.release_date,
+            first_air_date: data.first_air_date,
+            media_type: data.title ? 'movie' : 'tv',
+            popularity: data.popularity || 0,
+          });
+          return;
+        }
+      } catch (e) {
+        console.error('Failed to fetch movie:', e);
+      }
+
+      try {
+        const tvRes = await fetch(`/api/tmdb/tv/${tmdbId}`);
+        if (tvRes.ok) {
+          const data = await tvRes.json();
+          setItem({
+            id: data.id,
+            title: data.title,
+            name: data.name,
+            overview: data.overview || '',
+            poster_path: data.poster_path,
+            backdrop_path: data.backdrop_path,
+            vote_average: data.vote_average || 0,
+            release_date: data.release_date,
+            first_air_date: data.first_air_date,
+            media_type: 'tv',
+            popularity: data.popularity || 0,
+          });
+          return;
+        }
+      } catch (e) {
+        console.error('Failed to fetch TV:', e);
+      }
+
+      setLoading(false);
+    };
+    fetchMovie();
+  }, [tmdbId]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <span className="ml-3 text-neutral-500">加载影片详情...</span>
+      </div>
+    );
+  }
+
+  if (!item) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 gap-4">
+        <AlertCircle className="w-12 h-12 text-rose-500" />
+        <h3 className="text-lg font-bold text-neutral-900 dark:text-white">影片未找到</h3>
+        <button onClick={onBack} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm cursor-pointer">返回首页</button>
+      </div>
+    );
+  }
+
+  return (
+    <TMDBDetailPage
+      item={item}
+      getImageUrl={getImageUrl}
+      onBack={onBack}
+    />
+  );
+}
+
 export default function App() {
   // Navigation Routing States
   const [currentRoute, setCurrentRoute] = useState<PageRoute>('home');
@@ -126,6 +225,8 @@ export default function App() {
   const [tmdbHorrorMovies, setTmdbHorrorMovies] = useState<TMDBMovie[]>([]);
   const [tmdbHorrorMoviesLoading, setTmdbHorrorMoviesLoading] = useState(true);
   const [detailPageItem, setDetailPageItem] = useState<TMDBMovie | null>(null);
+  const [detailTmdbId, setDetailTmdbId] = useState<string>('');
+  const tmdbCacheRef = React.useRef<Record<string, TMDBMovie>>({});
   const [tmdbSelectedMovie, setTmdbSelectedMovie] = useState<TMDBMovie | null>(null);
 
   // TVBox States
@@ -135,6 +236,8 @@ export default function App() {
   const [tvboxSearchResults, setTvboxSearchResults] = useState<TVBoxVideoItem[]>([]);
   const [tvboxSearchLoading, setTvboxSearchLoading] = useState(false);
   const [tvboxPlayingDetail, setTvboxPlayingDetail] = useState<TVBoxVideoDetail | null>(null);
+  const [tvboxPlayUrl, setTvboxPlayUrl] = useState<string>('');
+  const [tvboxPlayName, setTvboxPlayName] = useState<string>('');
 
   // Video Source States
   const [videoSources, setVideoSources] = useState<VideoSource[]>([]);
@@ -180,6 +283,7 @@ export default function App() {
       if (!hash || hash === '#/' || hash === '#home') {
         setCurrentRoute('home');
         setActiveMovieId(null);
+        setDetailPageItem(null);
       } else if (hash.startsWith('#/movie/')) {
         const id = hash.replace('#/movie/', '');
         setActiveMovieId(id);
@@ -200,13 +304,17 @@ export default function App() {
         setCurrentRoute('variety');
       } else if (hash === '#/tvbox/play') {
         setCurrentRoute('tvbox-play');
+      } else if (hash.startsWith('#/detail/')) {
+        const id = hash.replace('#/detail/', '');
+        setDetailTmdbId(id);
+        setCurrentRoute('detail');
       } else if (hash === '#/detail') {
         setCurrentRoute('home');
       }
     };
 
     window.addEventListener('hashchange', handleHashChange);
-    handleHashChange(); // Run once initially
+    handleHashChange();
 
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
@@ -381,6 +489,12 @@ export default function App() {
 
   const handleTvboxPlay = (detail: TVBoxVideoDetail) => {
     setTvboxPlayingDetail(detail);
+    const playUrls = detail.vod_play_url?.split('#').filter(Boolean) || [];
+    const firstPlay = playUrls[0];
+    const streamUrl = firstPlay ? firstPlay.split('$')[1] || firstPlay : '';
+    const firstName = firstPlay ? firstPlay.split('$')[0] || '第1集' : '';
+    setTvboxPlayUrl(streamUrl);
+    setTvboxPlayName(firstName);
     navigateTo('#/tvbox/play');
   };
 
@@ -529,6 +643,12 @@ export default function App() {
   // Navigation router shortcuts
   const navigateTo = (hash: string) => {
     window.location.hash = hash;
+  };
+
+  const navigateToDetail = (item: TMDBMovie) => {
+    tmdbCacheRef.current[String(item.id)] = item;
+    setDetailPageItem(item);
+    window.location.hash = '#/detail/' + item.id;
   };
 
   // Spectator login submission handler
@@ -945,11 +1065,11 @@ export default function App() {
               }
               onPlay={(item) => {
                 const tmdbMatch = tmdbTrending.find(m => m.id === item.id);
-                if (tmdbMatch) { setDetailPageItem(tmdbMatch); navigateTo('#/detail'); }
+                if (tmdbMatch) { navigateToDetail(tmdbMatch); }
               }}
               onDetail={(item) => {
                 const tmdbMatch = tmdbTrending.find(m => m.id === item.id);
-                if (tmdbMatch) { setDetailPageItem(tmdbMatch); navigateTo('#/detail'); }
+                if (tmdbMatch) { navigateToDetail(tmdbMatch); }
               }}
               loading={tmdbTrendingLoading}
             />
@@ -967,7 +1087,7 @@ export default function App() {
                     icon={<Film className="w-5 h-5" />}
                     items={tmdbNowPlaying}
                     getImageUrl={getTmdbImageUrl}
-                    onItemClick={(item) => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    onItemClick={(item) => { navigateToDetail(item); }}
                     loading={tmdbNowPlayingLoading}
                   />
 
@@ -977,7 +1097,7 @@ export default function App() {
                     icon={<Flame className="w-5 h-5" />}
                     items={tmdbPopular}
                     getImageUrl={getTmdbImageUrl}
-                    onItemClick={(item) => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    onItemClick={(item) => { navigateToDetail(item); }}
                     loading={tmdbPopularLoading}
                   />
 
@@ -987,7 +1107,7 @@ export default function App() {
                     icon={<Globe className="w-5 h-5" />}
                     items={tmdbChineseMovies}
                     getImageUrl={getTmdbImageUrl}
-                    onItemClick={(item) => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    onItemClick={(item) => { navigateToDetail(item); }}
                     loading={tmdbChineseMoviesLoading}
                   />
 
@@ -997,7 +1117,7 @@ export default function App() {
                     icon={<Bomb className="w-5 h-5" />}
                     items={tmdbActionMovies}
                     getImageUrl={getTmdbImageUrl}
-                    onItemClick={(item) => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    onItemClick={(item) => { navigateToDetail(item); }}
                     loading={tmdbActionMoviesLoading}
                   />
 
@@ -1007,7 +1127,7 @@ export default function App() {
                     icon={<Rocket className="w-5 h-5" />}
                     items={tmdbScifiMovies}
                     getImageUrl={getTmdbImageUrl}
-                    onItemClick={(item) => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    onItemClick={(item) => { navigateToDetail(item); }}
                     loading={tmdbScifiMoviesLoading}
                   />
 
@@ -1017,7 +1137,7 @@ export default function App() {
                     icon={<Skull className="w-5 h-5" />}
                     items={tmdbHorrorMovies}
                     getImageUrl={getTmdbImageUrl}
-                    onItemClick={(item) => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    onItemClick={(item) => { navigateToDetail(item); }}
                     loading={tmdbHorrorMoviesLoading}
                   />
 
@@ -1027,7 +1147,7 @@ export default function App() {
                     icon={<Tv className="w-5 h-5" />}
                     items={tmdbTvPopular}
                     getImageUrl={getTmdbImageUrl}
-                    onItemClick={(item) => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    onItemClick={(item) => { navigateToDetail(item); }}
                     loading={tmdbTvPopularLoading}
                   />
 
@@ -1037,7 +1157,7 @@ export default function App() {
                     icon={<Zap className="w-5 h-5" />}
                     items={tmdbChineseAnime}
                     getImageUrl={getTmdbImageUrl}
-                    onItemClick={(item) => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    onItemClick={(item) => { navigateToDetail(item); }}
                     loading={tmdbChineseAnimeLoading}
                   />
 
@@ -1047,7 +1167,7 @@ export default function App() {
                     icon={<Star className="w-5 h-5" />}
                     items={tmdbTvTopRated}
                     getImageUrl={getTmdbImageUrl}
-                    onItemClick={(item) => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    onItemClick={(item) => { navigateToDetail(item); }}
                     loading={tmdbTvTopRatedLoading}
                   />
 
@@ -1080,7 +1200,7 @@ export default function App() {
                         {tmdbPopular.slice(0, 5).map((item, idx) => (
                           <div
                             key={item.id}
-                            onClick={() => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                            onClick={() => { navigateToDetail(item); }}
                             className="flex gap-3 cursor-pointer group"
                           >
                             <span className="text-lg font-black text-gray-300 w-6 text-center">{idx + 1}</span>
@@ -1104,7 +1224,7 @@ export default function App() {
                         {tmdbNowPlaying.slice(0, 5).map((item, idx) => (
                           <div
                             key={item.id}
-                            onClick={() => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                            onClick={() => { navigateToDetail(item); }}
                             className="flex gap-3 cursor-pointer group"
                           >
                             <span className="text-lg font-black text-gray-300 w-6 text-center">{idx + 1}</span>
@@ -1128,7 +1248,7 @@ export default function App() {
                         {tmdbTvTopRated.slice(0, 5).map((item, idx) => (
                           <div
                             key={item.id}
-                            onClick={() => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                            onClick={() => { navigateToDetail(item); }}
                             className="flex gap-3 cursor-pointer group"
                           >
                             <span className="text-lg font-black text-gray-300 w-6 text-center">{idx + 1}</span>
@@ -1170,18 +1290,6 @@ export default function App() {
 
               </div>
             </div>
-
-            {/* TMDB Detail Page */}
-            {detailPageItem && (
-              <TMDBDetailPage
-                item={detailPageItem}
-                getImageUrl={getTmdbImageUrl}
-                onBack={() => setDetailPageItem(null)}
-                onPlay={(item) => {
-                  showToast('未找到可用视频源，请先在管理后台添加个人视频源', 'error');
-                }}
-              />
-            )}
           </div>
         )}
 
@@ -1236,7 +1344,7 @@ export default function App() {
                 .map((item) => (
                   <div
                     key={item.id}
-                    onClick={() => { setDetailPageItem(item); navigateTo('#/detail'); }}
+                    onClick={() => { navigateToDetail(item); }}
                     className="group cursor-pointer"
                   >
                     <div className="relative aspect-[2/3] bg-gray-200 rounded-xl overflow-hidden shadow-md mb-2">
@@ -1259,19 +1367,19 @@ export default function App() {
                   </div>
                 ))}
             </div>
-
-            {/* TMDB Detail Page */}
-            {detailPageItem && (
-              <TMDBDetailPage
-                item={detailPageItem}
-                getImageUrl={getTmdbImageUrl}
-                onBack={() => setDetailPageItem(null)}
-                onPlay={(item) => {
-                  showToast('未找到可用视频源，请先在管理后台添加个人视频源', 'error');
-                }}
-              />
-            )}
           </div>
+        )}
+
+        {/* ====================================
+            VIEW: TMDB DETAIL PAGE (Standalone Route)
+            ==================================== */}
+        {currentRoute === 'detail' && (
+          <TMDBDetailRoute
+            tmdbId={detailTmdbId}
+            getImageUrl={getTmdbImageUrl}
+            tmdbCache={tmdbCacheRef.current}
+            onBack={() => { setDetailPageItem(null); navigateTo('#/'); }}
+          />
         )}
 
         {/* ====================================
@@ -1626,39 +1734,44 @@ export default function App() {
               <div className="lg:col-span-2 space-y-4">
                 {(() => {
                   const playUrls = tvboxPlayingDetail.vod_play_url?.split('#').filter(Boolean) || [];
-                  const firstPlay = playUrls[0];
-                  const streamUrl = firstPlay ? firstPlay.split('$')[1] || firstPlay : '';
-                  return streamUrl ? (
+                  return tvboxPlayUrl ? (
                     <div className="bg-slate-900/50 p-4 sm:p-6 rounded-2xl border border-slate-800 shadow-2xl space-y-4">
                       <div className="flex items-center justify-between border-b border-slate-800/60 pb-3">
                         <div className="flex items-center gap-2">
                           <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
                           <h2 className="font-bold text-lg text-white">{tvboxPlayingDetail.vod_name}</h2>
+                          {tvboxPlayName && <span className="text-sm text-blue-400">{tvboxPlayName}</span>}
                         </div>
                         <span className="text-[10px] bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded font-mono font-bold tracking-widest uppercase border border-purple-500/20">
                           TVBOX SOURCE
                         </span>
                       </div>
-                      <VideoPlayer src={streamUrl} title={tvboxPlayingDetail.vod_name} />
+                      <div className="aspect-video">
+                        <VideoPlayer src={tvboxPlayUrl} title={`${tvboxPlayingDetail.vod_name} - ${tvboxPlayName}`} />
+                      </div>
                       {playUrls.length > 1 && (
                         <div className="space-y-2">
-                          <h3 className="text-sm font-bold text-white">选集</h3>
+                          <h3 className="text-sm font-bold text-white">选集 ({playUrls.length})</h3>
                           <div className="flex flex-wrap gap-2">
                             {playUrls.map((ep, idx) => {
-                              const [epName, epUrl] = ep.split('$');
+                              const parts = ep.split('$');
+                              const epName = parts[0] || `第${idx + 1}集`;
+                              const epUrl = parts[1] || ep;
+                              const isActive = tvboxPlayName === epName || (!tvboxPlayName && idx === 0);
                               return (
                                 <button
                                   key={idx}
                                   onClick={() => {
-                                    const container = document.getElementById('route-tvbox-play');
-                                    if (container) {
-                                      const video = container.querySelector('video');
-                                      if (video && epUrl) video.src = epUrl;
-                                    }
+                                    setTvboxPlayUrl(epUrl);
+                                    setTvboxPlayName(epName);
                                   }}
-                                  className="px-3 py-1.5 bg-slate-800 hover:bg-blue-600 text-slate-300 hover:text-white text-xs rounded-lg transition-colors cursor-pointer"
+                                  className={`px-3 py-1.5 text-xs rounded-lg transition-colors cursor-pointer ${
+                                    isActive
+                                      ? 'bg-blue-600 text-white'
+                                      : 'bg-slate-800 hover:bg-blue-600 text-slate-300 hover:text-white'
+                                  }`}
                                 >
-                                  {epName || `第${idx + 1}集`}
+                                  {epName}
                                 </button>
                               );
                             })}
