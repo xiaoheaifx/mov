@@ -4,6 +4,8 @@ import { TVBoxSite, TVBoxVideoItem, TVBoxVideoDetail } from '../types.js';
 
 interface TVBoxPanelProps {
   sites: TVBoxSite[];
+  cmsSites: TVBoxSite[];
+  spiderCount: number;
   onParseUrl: (url: string) => Promise<void>;
   onSearch: (siteUrl: string, keyword: string) => Promise<void>;
   onGetDetail: (siteUrl: string, vodId: string) => Promise<TVBoxVideoDetail | null>;
@@ -16,6 +18,8 @@ interface TVBoxPanelProps {
 
 export default function TVBoxPanel({
   sites,
+  cmsSites,
+  spiderCount,
   onParseUrl,
   onSearch,
   onGetDetail,
@@ -110,10 +114,10 @@ export default function TVBoxPanel({
             </div>
           )}
 
-          {httpSites.length > 0 && (
+          {cmsSites.length > 0 && (
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
-                {httpSites.map(site => (
+                {cmsSites.map(site => (
                   <button
                     key={site.key}
                     onClick={() => setSelectedSite(site)}
@@ -193,10 +197,17 @@ export default function TVBoxPanel({
             </div>
           )}
 
-          {sites.length > 0 && httpSites.length === 0 && (
-            <p className="text-sm text-neutral-500 dark:text-slate-400 text-center py-4">
-              该接口中的站点均为 Spider 类型，暂不支持在线搜索。请尝试其他包含 CMS 采集站的接口。
-            </p>
+          {sites.length > 0 && cmsSites.length === 0 && (
+            <div className="space-y-2">
+              <p className="text-sm text-neutral-500 dark:text-slate-400 text-center py-4">
+                该接口中的站点均为 Spider 类型，暂不支持在线搜索。请尝试其他包含 CMS 采集站的接口。
+              </p>
+              {spiderCount > 0 && (
+                <p className="text-xs text-neutral-400 dark:text-slate-500 text-center">
+                  检测到 {spiderCount} 个 Spider 类型站点
+                </p>
+              )}
+            </div>
           )}
         </div>
       )}

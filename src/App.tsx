@@ -231,6 +231,8 @@ export default function App() {
 
   // TVBox States
   const [tvboxSites, setTvboxSites] = useState<TVBoxSite[]>([]);
+  const [tvboxCmsSites, setTvboxCmsSites] = useState<TVBoxSite[]>([]);
+  const [tvboxSpiderCount, setTvboxSpiderCount] = useState<number>(0);
   const [tvboxLoading, setTvboxLoading] = useState(false);
   const [tvboxParseError, setTvboxParseError] = useState<string | null>(null);
   const [tvboxSearchResults, setTvboxSearchResults] = useState<TVBoxVideoItem[]>([]);
@@ -455,7 +457,15 @@ export default function App() {
       const data = await res.json();
       if (data.success) {
         setTvboxSites(data.sites || []);
-        showToast(`成功解析 ${data.sites?.length || 0} 个站点`, 'success');
+        setTvboxCmsSites(data.cmsSites || []);
+        setTvboxSpiderCount(data.spiderCount || 0);
+        const cmsCount = data.cmsSites?.length || 0;
+        const totalCount = data.sites?.length || 0;
+        if (cmsCount > 0) {
+          showToast(`成功解析 ${totalCount} 个站点，其中 ${cmsCount} 个支持CMS搜索`, 'success');
+        } else {
+          showToast(`成功解析 ${totalCount} 个站点，但均为Spider类型，不支持CMS搜索`, 'error');
+        }
       } else {
         setTvboxParseError(data.error || '解析失败');
       }
@@ -2505,6 +2515,8 @@ export default function App() {
                         <div id="dash-tvbox-tab-content" className="space-y-6">
                           <TVBoxPanel
                             sites={tvboxSites}
+                            cmsSites={tvboxCmsSites}
+                            spiderCount={tvboxSpiderCount}
                             onParseUrl={handleTvboxParse}
                             onSearch={handleTvboxSearch}
                             onGetDetail={handleTvboxGetDetail}

@@ -1173,17 +1173,31 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       if (!url) return { statusCode: 400, body: JSON.stringify({ error: '请提供TVBox接口地址' }) };
       
       try {
+        // Fix URL encoding for Chinese characters
+        let parsedUrl: URL;
+        try {
+          parsedUrl = new URL(url);
+        } catch (urlErr) {
+          // Try to encode the URL properly
+          try {
+            const encodedUrl = encodeURI(url);
+            parsedUrl = new URL(encodedUrl);
+          } catch (encodeErr) {
+            return { statusCode: 400, body: JSON.stringify({ error: '接口地址格式不正确，请检查URL是否有效' }) };
+          }
+        }
+        
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 30000);
         
         // Use more browser-like headers to avoid being blocked
-        const apiRes = await fetch(url, { 
+        const apiRes = await fetch(parsedUrl.toString(), { 
           signal: controller.signal, 
           headers: { 
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'application/json, text/plain, */*',
             'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-            'Referer': url
+            'Referer': parsedUrl.origin
           },
           redirect: 'follow'
         });
@@ -1196,8 +1210,15 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
         let config: any;
         try {
           const text = await apiRes.text();
-          // Clean up BOM and whitespace
-          const cleanText = text.trim().replace(/^\uFEFF/, '');
+          // Clean up BOM, whitespace, and try to extract JSON
+          let cleanText = text.trim().replace(/^\uFEFF/, '');
+          
+          // Try to find JSON in the response (handle cases where there's extra content)
+          const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            cleanText = jsonMatch[0];
+          }
+          
           config = JSON.parse(cleanText);
         } catch (parseErr: any) {
           return { statusCode: 502, body: JSON.stringify({ error: `TVBox配置JSON解析失败: ${parseErr.message}。请确认接口地址返回的是有效的JSON格式。` }) };
@@ -1207,7 +1228,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
           return { statusCode: 502, body: JSON.stringify({ error: 'TVBox配置格式不正确，缺少sites字段。请确认这是有效的TVBox接口地址。' }) };
         }
 
-        // Include ALL site types, not just 0 and 1
+        // Filter and categorize sites
         const allSites = config.sites.map((s: any) => ({
           key: s.key,
           name: s.name,
@@ -1219,7 +1240,24 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
           filterable: s.filterable ?? 1
         }));
 
-        const httpSites = config.sites.filter((s: any) => s.type === 0 || s.type === 1);
+        // Only include CMS sites (type 0 or 1) that support searching
+        const cmsSites = config.sites.filter((s: any) => 
+          (s.type === 0 || s.type === 1) && 
+          s.api && 
+          (s.searchable === undefined || s.searchable === 1)
+        ).map((s: any) => ({
+          key: s.key,
+          name: s.name,
+          type: s.type,
+          api: s.api,
+          detail: s.ext || '',
+          searchable: s.searchable ?? 1,
+          quickSearch: s.quickSearch ?? 1,
+          filterable: s.filterable ?? 1
+        }));
+
+        // Count Spider sites for info
+        const spiderCount = config.sites.filter((s: any) => s.type === 3 || s.type === 4).length;
 
         return {
           statusCode: 200,
@@ -1227,7 +1265,8 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
             success: true,
             spider: config.spider || '',
             sites: allSites,
-            httpSites,
+            cmsSites,
+            spiderCount,
             wallpaper: config.wallpaper || ''
           })
         };
