@@ -5,6 +5,8 @@ import { TVBoxSite, TVBoxVideoItem, TVBoxVideoDetail } from '../types.js';
 interface TVBoxPanelProps {
   sites: TVBoxSite[];
   cmsSites: TVBoxSite[];
+  spiderSites: TVBoxSite[];
+  cmsCount: number;
   spiderCount: number;
   onParseUrl: (url: string) => Promise<void>;
   onSearch: (siteUrl: string, keyword: string) => Promise<void>;
@@ -19,6 +21,8 @@ interface TVBoxPanelProps {
 export default function TVBoxPanel({
   sites,
   cmsSites,
+  spiderSites,
+  cmsCount,
   spiderCount,
   onParseUrl,
   onSearch,
@@ -116,6 +120,9 @@ export default function TVBoxPanel({
 
           {cmsSites.length > 0 && (
             <div className="space-y-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-medium text-neutral-600 dark:text-slate-400">CMS采集站 ({cmsCount})</span>
+              </div>
               <div className="flex flex-wrap gap-2">
                 {cmsSites.map(site => (
                   <button
@@ -131,82 +138,100 @@ export default function TVBoxPanel({
                   </button>
                 ))}
               </div>
-
-              {selectedSite && (
-                <div className="flex gap-2">
-                  <div className="flex-1 relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
-                    <input
-                      type="text"
-                      value={searchKeyword}
-                      onChange={e => setSearchKeyword(e.target.value)}
-                      placeholder={`在 ${selectedSite.name} 中搜索...`}
-                      className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 dark:bg-slate-800 border border-neutral-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all"
-                      onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                    />
-                  </div>
-                  <button
-                    onClick={handleSearch}
-                    disabled={searchLoading || !searchKeyword.trim()}
-                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-300 dark:disabled:bg-slate-700 text-white rounded-xl text-sm font-medium transition-colors cursor-pointer disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {searchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                    搜索
-                  </button>
-                </div>
-              )}
-
-              {searchResults.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                  {searchResults.map(item => (
-                    <div
-                      key={item.vod_id}
-                      onClick={() => handleItemClick(item)}
-                      className="group cursor-pointer"
-                    >
-                      <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-neutral-200 dark:bg-slate-800 mb-2">
-                        <img
-                          src={item.vod_pic}
-                          alt={item.vod_name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                          <div className="w-10 h-10 rounded-full bg-blue-600/90 text-white flex items-center justify-center shadow-lg">
-                            <Play className="w-4 h-4 fill-white ml-0.5" />
-                          </div>
-                        </div>
-                        {item.vod_remarks && (
-                          <span className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm text-white text-[10px] px-1.5 py-0.5 rounded-md">
-                            {item.vod_remarks}
-                          </span>
-                        )}
-                      </div>
-                      <h4 className="text-sm font-semibold text-neutral-900 dark:text-white line-clamp-1 group-hover:text-blue-500 transition-colors">
-                        {item.vod_name}
-                      </h4>
-                      <p className="text-xs text-neutral-500 dark:text-slate-400 line-clamp-1">
-                        {item.type_name} {item.vod_year && `· ${item.vod_year}`}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           )}
 
-          {sites.length > 0 && cmsSites.length === 0 && (
+          {spiderSites.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-medium text-neutral-600 dark:text-slate-400">Spider扩展站 ({spiderCount})</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {spiderSites.map(site => (
+                  <button
+                    key={site.key}
+                    onClick={() => setSelectedSite(site)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+                      selectedSite?.key === site.key
+                        ? 'bg-green-600 text-white shadow-md'
+                        : 'bg-neutral-100 dark:bg-slate-800 text-neutral-700 dark:text-slate-300 hover:bg-neutral-200 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    {site.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {selectedSite && (
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                <input
+                  type="text"
+                  value={searchKeyword}
+                  onChange={e => setSearchKeyword(e.target.value)}
+                  placeholder={`在 ${selectedSite.name} 中搜索...`}
+                  className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 dark:bg-slate-800 border border-neutral-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all"
+                  onKeyDown={e => e.key === 'Enter' && handleSearch()}
+                />
+              </div>
+              <button
+                onClick={handleSearch}
+                disabled={searchLoading || !searchKeyword.trim()}
+                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-300 dark:disabled:bg-slate-700 text-white rounded-xl text-sm font-medium transition-colors cursor-pointer disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {searchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                搜索
+              </button>
+            </div>
+          )}
+
+          {searchResults.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {searchResults.map(item => (
+                <div
+                  key={item.vod_id}
+                  onClick={() => handleItemClick(item)}
+                  className="group cursor-pointer"
+                >
+                  <div className="relative aspect-[2/3] rounded-xl overflow-hidden bg-neutral-200 dark:bg-slate-800 mb-2">
+                    <img
+                      src={item.vod_pic}
+                      alt={item.vod_name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="w-10 h-10 rounded-full bg-blue-600/90 text-white flex items-center justify-center shadow-lg">
+                        <Play className="w-4 h-4 fill-white ml-0.5" />
+                      </div>
+                    </div>
+                    {item.vod_remarks && (
+                      <span className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm text-white text-[10px] px-1.5 py-0.5 rounded-md">
+                        {item.vod_remarks}
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="text-sm font-semibold text-neutral-900 dark:text-white line-clamp-1 group-hover:text-blue-500 transition-colors">
+                    {item.vod_name}
+                  </h4>
+                  <p className="text-xs text-neutral-500 dark:text-slate-400 line-clamp-1">
+                    {item.type_name} {item.vod_year && `· ${item.vod_year}`}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {sites.length > 0 && cmsSites.length === 0 && spiderSites.length === 0 && (
             <div className="space-y-2">
               <p className="text-sm text-neutral-500 dark:text-slate-400 text-center py-4">
-                该接口中的站点均为 Spider 类型，暂不支持在线搜索。请尝试其他包含 CMS 采集站的接口。
+                该接口中的站点类型暂不支持在线搜索。请尝试其他包含 CMS 采集站的接口。
               </p>
-              {spiderCount > 0 && (
-                <p className="text-xs text-neutral-400 dark:text-slate-500 text-center">
-                  检测到 {spiderCount} 个 Spider 类型站点
-                </p>
-              )}
             </div>
           )}
         </div>

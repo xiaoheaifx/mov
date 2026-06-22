@@ -84,14 +84,14 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack }: TMDBDetail
     const title = detail?.title || detail?.name || item.title || item.name || '';
     if (!title) return;
     searchVideoSources(title);
-  }, [detail]);
+  }, [detail, item]);
 
   const searchVideoSources = async (keyword: string) => {
     setSearchingSources(true);
     setSourceResults([]);
     try {
       console.log(`[TMDBDetailPage] Starting search for: "${keyword}"`);
-      const vsRes = await fetch('/api/video-sources');
+      const vsRes = await fetch('/api/video-sources', { credentials: 'include' });
       if (!vsRes.ok) {
         console.error('[TMDBDetailPage] Failed to fetch video sources:', vsRes.status, vsRes.statusText);
         return;
@@ -113,7 +113,7 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack }: TMDBDetail
           const searchUrl = `/api/video-sources/search?sourceId=${encodeURIComponent(source.id)}&wd=${encodeURIComponent(keyword)}`;
           console.log(`[TMDBDetailPage] Search URL: ${searchUrl}`);
           
-          const searchRes = await fetch(searchUrl);
+          const searchRes = await fetch(searchUrl, { credentials: 'include' });
           if (!searchRes.ok) {
             console.warn(`[TMDBDetailPage] Search failed for ${source.name}: HTTP ${searchRes.status}`);
             const errorText = await searchRes.text();
@@ -128,7 +128,7 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack }: TMDBDetail
             const vodId = firstItem.vod_id;
             console.log(`[TMDBDetailPage] Found match in ${source.name}: ${firstItem.vod_name} (ID: ${vodId})`);
             
-            const detailRes = await fetch(`/api/video-sources/detail?sourceId=${encodeURIComponent(source.id)}&ids=${vodId}`);
+            const detailRes = await fetch(`/api/video-sources/detail?sourceId=${encodeURIComponent(source.id)}&ids=${vodId}`, { credentials: 'include' });
             if (detailRes.ok) {
               const detailData = await detailRes.json();
               if (detailData.list && detailData.list.length > 0) {

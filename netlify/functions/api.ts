@@ -20,11 +20,12 @@ function parseCookies(cookieHeader: string | undefined): Record<string, string> 
 
 // Session cookie helpers
 function setSessionCookie(name: string, token: string, maxAgeSec: number = 86400 * 30): string {
-  return `${name}=${encodeURIComponent(token)}; HttpOnly; Path=/; Max-Age=${maxAgeSec}; SameSite=Strict`;
+  // Use SameSite=Lax for better compatibility, no Secure flag for localhost/HTTP support
+  return `${name}=${encodeURIComponent(token)}; HttpOnly; Path=/; Max-Age=${maxAgeSec}; SameSite=Lax`;
 }
 
 function clearSessionCookie(name: string): string {
-  return `${name}=; HttpOnly; Path=/; Max-Age=0; SameSite=Strict`;
+  return `${name}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax`;
 }
 
 // TMDB API helper
@@ -714,17 +715,45 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       }
 
       try {
-        const searchUrl = `${source.api}?ac=videolist&wd=${encodeURIComponent(keyword)}`;
+        // Normalize API URL: ensure it ends with / or ? properly
+        let baseUrl = source.api.trim();
+        // Remove trailing slash if present, then add proper query params
+        if (baseUrl.endsWith('/')) {
+          baseUrl = baseUrl.slice(0, -1);
+        }
+        const searchUrl = `${baseUrl}?ac=videolist&wd=${encodeURIComponent(keyword)}`;
+        
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15000);
-        const apiRes = await fetch(searchUrl, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const apiRes = await fetch(searchUrl, { 
+          signal: controller.signal, 
+          headers: { 
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json',
+            'Referer': baseUrl
+          } 
+        });
         clearTimeout(timeout);
 
         if (!apiRes.ok) {
           return { statusCode: 502, body: JSON.stringify({ error: `搜索请求失败: HTTP ${apiRes.status}` }) };
         }
 
-        const data = await apiRes.json();
+        const text = await apiRes.text();
+        // Try to parse JSON, handle potential malformed responses
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (parseErr) {
+          // Try to extract JSON from text
+          const jsonMatch = text.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            data = JSON.parse(jsonMatch[0]);
+          } else {
+            return { statusCode: 502, body: JSON.stringify({ error: 'API返回数据格式错误' }) };
+          }
+        }
+        
         return { statusCode: 200, body: JSON.stringify(data) };
       } catch (e: any) {
         return { statusCode: 502, body: JSON.stringify({ error: '搜索失败: ' + (e.message || '网络错误') }) };
@@ -745,19 +774,44 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       }
 
       try {
-        const detailUrl = source.detail
-          ? `${source.detail}?ac=videolist&ids=${vodId}`
-          : `${source.api}?ac=videolist&ids=${vodId}`;
+        // Normalize API URL
+        let baseUrl = (source.detail || source.api).trim();
+        if (baseUrl.endsWith('/')) {
+          baseUrl = baseUrl.slice(0, -1);
+        }
+        const detailUrl = `${baseUrl}?ac=videolist&ids=${vodId}`;
+        
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15000);
-        const apiRes = await fetch(detailUrl, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const apiRes = await fetch(detailUrl, { 
+          signal: controller.signal, 
+          headers: { 
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json',
+            'Referer': baseUrl
+          } 
+        });
         clearTimeout(timeout);
 
         if (!apiRes.ok) {
           return { statusCode: 502, body: JSON.stringify({ error: `详情请求失败: HTTP ${apiRes.status}` }) };
         }
 
-        const data = await apiRes.json();
+        const text = await apiRes.text();
+        // Try to parse JSON, handle potential malformed responses
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (parseErr) {
+          // Try to extract JSON from text
+          const jsonMatch = text.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            data = JSON.parse(jsonMatch[0]);
+          } else {
+            return { statusCode: 502, body: JSON.stringify({ error: 'API返回数据格式错误' }) };
+          }
+        }
+        
         return { statusCode: 200, body: JSON.stringify(data) };
       } catch (e: any) {
         return { statusCode: 502, body: JSON.stringify({ error: '获取详情失败: ' + (e.message || '网络错误') }) };
@@ -1228,7 +1282,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
           return { statusCode: 502, body: JSON.stringify({ error: 'TVBox配置格式不正确，缺少sites字段。请确认这是有效的TVBox接口地址。' }) };
         }
 
-        // Filter and categorize sites
+        // Include ALL site types (0, 1, 3, 4) - like TVBox and 影视仓 apps do
         const allSites = config.sites.map((s: any) => ({
           key: s.key,
           name: s.name,
@@ -1240,7 +1294,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
           filterable: s.filterable ?? 1
         }));
 
-        // Only include CMS sites (type 0 or 1) that support searching
+        // CMS sites (type 0 or 1) that support searching
         const cmsSites = config.sites.filter((s: any) => 
           (s.type === 0 || s.type === 1) && 
           s.api && 
@@ -1256,8 +1310,20 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
           filterable: s.filterable ?? 1
         }));
 
-        // Count Spider sites for info
-        const spiderCount = config.sites.filter((s: any) => s.type === 3 || s.type === 4).length;
+        // Spider sites (type 3 or 4) - these use JavaScript extensions for parsing
+        const spiderSites = config.sites.filter((s: any) => 
+          (s.type === 3 || s.type === 4) && 
+          s.api
+        ).map((s: any) => ({
+          key: s.key,
+          name: s.name,
+          type: s.type,
+          api: s.api,
+          detail: s.ext || '',
+          searchable: s.searchable ?? 1,
+          quickSearch: s.quickSearch ?? 1,
+          filterable: s.filterable ?? 1
+        }));
 
         return {
           statusCode: 200,
@@ -1266,7 +1332,9 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
             spider: config.spider || '',
             sites: allSites,
             cmsSites,
-            spiderCount,
+            spiderSites,
+            cmsCount: cmsSites.length,
+            spiderCount: spiderSites.length,
             wallpaper: config.wallpaper || ''
           })
         };

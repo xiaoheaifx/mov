@@ -58,23 +58,31 @@ function TMDBDetailRoute({ tmdbId, getImageUrl, tmdbCache, onBack }: {
 }) {
   const [item, setItem] = useState<TMDBMovie | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!tmdbId) return;
+    if (!tmdbId) {
+      setLoading(false);
+      return;
+    }
     
+    // Check cache first
     if (tmdbCache[tmdbId]) {
       setItem(tmdbCache[tmdbId]);
       setLoading(false);
       return;
     }
 
+    // Fetch from API if not in cache
     const fetchMovie = async () => {
       setLoading(true);
+      setError(null);
       try {
+        // Try movie first
         const movieRes = await fetch(`/api/tmdb/movie/${tmdbId}`);
         if (movieRes.ok) {
           const data = await movieRes.json();
-          setItem({
+          const movieItem: TMDBMovie = {
             id: data.id,
             title: data.title,
             name: data.name,
@@ -84,20 +92,25 @@ function TMDBDetailRoute({ tmdbId, getImageUrl, tmdbCache, onBack }: {
             vote_average: data.vote_average || 0,
             release_date: data.release_date,
             first_air_date: data.first_air_date,
-            media_type: data.title ? 'movie' : 'tv',
+            media_type: 'movie',
             popularity: data.popularity || 0,
-          });
+          };
+          setItem(movieItem);
+          // Cache the result
+          tmdbCache[tmdbId] = movieItem;
+          setLoading(false);
           return;
         }
       } catch (e) {
         console.error('Failed to fetch movie:', e);
       }
 
+      // Try TV if movie fails
       try {
         const tvRes = await fetch(`/api/tmdb/tv/${tmdbId}`);
         if (tvRes.ok) {
           const data = await tvRes.json();
-          setItem({
+          const tvItem: TMDBMovie = {
             id: data.id,
             title: data.title,
             name: data.name,
@@ -109,15 +122,22 @@ function TMDBDetailRoute({ tmdbId, getImageUrl, tmdbCache, onBack }: {
             first_air_date: data.first_air_date,
             media_type: 'tv',
             popularity: data.popularity || 0,
-          });
+          };
+          setItem(tvItem);
+          // Cache the result
+          tmdbCache[tmdbId] = tvItem;
+          setLoading(false);
           return;
         }
       } catch (e) {
         console.error('Failed to fetch TV:', e);
       }
 
+      // If both fail, show error
+      setError('无法加载影片信息');
       setLoading(false);
     };
+
     fetchMovie();
   }, [tmdbId]);
 
@@ -130,11 +150,11 @@ function TMDBDetailRoute({ tmdbId, getImageUrl, tmdbCache, onBack }: {
     );
   }
 
-  if (!item) {
+  if (error || !item) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4">
         <AlertCircle className="w-12 h-12 text-rose-500" />
-        <h3 className="text-lg font-bold text-neutral-900 dark:text-white">影片未找到</h3>
+        <h3 className="text-lg font-bold text-neutral-900 dark:text-white">{error || '影片未找到'}</h3>
         <button onClick={onBack} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm cursor-pointer">返回首页</button>
       </div>
     );
@@ -173,6 +193,8 @@ export default function App() {
   // Search, Filters & View Options
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState('全部');
+  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [searchInputValue, setSearchInputValue] = useState('');
 
   // Interactive UI Modal States
   const [movieModalOpen, setMovieModalOpen] = useState(false);
@@ -232,6 +254,8 @@ export default function App() {
   // TVBox States
   const [tvboxSites, setTvboxSites] = useState<TVBoxSite[]>([]);
   const [tvboxCmsSites, setTvboxCmsSites] = useState<TVBoxSite[]>([]);
+  const [tvboxSpiderSites, setTvboxSpiderSites] = useState<TVBoxSite[]>([]);
+  const [tvboxCmsCount, setTvboxCmsCount] = useState<number>(0);
   const [tvboxSpiderCount, setTvboxSpiderCount] = useState<number>(0);
   const [tvboxLoading, setTvboxLoading] = useState(false);
   const [tvboxParseError, setTvboxParseError] = useState<string | null>(null);
@@ -458,13 +482,16 @@ export default function App() {
       if (data.success) {
         setTvboxSites(data.sites || []);
         setTvboxCmsSites(data.cmsSites || []);
+        setTvboxSpiderSites(data.spiderSites || []);
+        setTvboxCmsCount(data.cmsCount || 0);
         setTvboxSpiderCount(data.spiderCount || 0);
         const cmsCount = data.cmsSites?.length || 0;
+        const spiderCount = data.spiderSites?.length || 0;
         const totalCount = data.sites?.length || 0;
-        if (cmsCount > 0) {
-          showToast(`成功解析 ${totalCount} 个站点，其中 ${cmsCount} 个支持CMS搜索`, 'success');
+        if (cmsCount > 0 || spiderCount > 0) {
+          showToast(`成功解析 ${totalCount} 个站点：${cmsCount} 个CMS采集站，${spiderCount} 个Spider扩展站`, 'success');
         } else {
-          showToast(`成功解析 ${totalCount} 个站点，但均为Spider类型，不支持CMS搜索`, 'error');
+          showToast(`成功解析 ${totalCount} 个站点`, 'success');
         }
       } else {
         setTvboxParseError(data.error || '解析失败');
@@ -782,6 +809,33 @@ export default function App() {
     tmdbCacheRef.current[String(item.id)] = item;
     setDetailPageItem(item);
     window.location.hash = '#/detail/' + item.id;
+  };
+
+  // TMDB Search handler
+  const handleTmdbSearch = async (query: string) => {
+    setTmdbSearchLoading(true);
+    setTmdbSearchQuery(query);
+    try {
+      const res = await fetch(`/api/tmdb/search?query=${encodeURIComponent(query)}`);
+      if (res.ok) {
+        const data = await res.json();
+        // Filter results to only include movies and TV shows
+        const filteredResults = (data.results || [])
+          .filter((item: any) => item.media_type === 'movie' || item.media_type === 'tv' || item.title || item.name)
+          .map((item: any) => ({
+            ...item,
+            media_type: item.media_type || (item.first_air_date ? 'tv' : 'movie')
+          }));
+        setTmdbSearchResults(filteredResults);
+      } else {
+        setTmdbSearchResults([]);
+      }
+    } catch (e) {
+      console.error('Search failed:', e);
+      setTmdbSearchResults([]);
+    } finally {
+      setTmdbSearchLoading(false);
+    }
   };
 
   // Spectator login submission handler
@@ -1127,13 +1181,25 @@ export default function App() {
           {/* Right Controls */}
           <nav className="flex items-center gap-3">
             {/* Search */}
-            <button className="p-2 text-gray-400 hover:text-neutral-900 transition-colors">
+            <button 
+              onClick={() => setShowSearchModal(true)}
+              className="p-2 text-gray-400 hover:text-neutral-900 transition-colors"
+            >
               <Search className="w-5 h-5" />
             </button>
             
             {/* Theme Toggle */}
             <button
-              onClick={() => setIsDark(!isDark)}
+              onClick={() => {
+                const newDark = !isDark;
+                setIsDark(newDark);
+                localStorage.setItem('theme', newDark ? 'dark' : 'light');
+                if (newDark) {
+                  document.documentElement.classList.add('dark');
+                } else {
+                  document.documentElement.classList.remove('dark');
+                }
+              }}
               className="p-2 text-gray-400 hover:text-neutral-900 transition-colors"
             >
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -2516,6 +2582,8 @@ export default function App() {
                           <TVBoxPanel
                             sites={tvboxSites}
                             cmsSites={tvboxCmsSites}
+                            spiderSites={tvboxSpiderSites}
+                            cmsCount={tvboxCmsCount}
                             spiderCount={tvboxSpiderCount}
                             onParseUrl={handleTvboxParse}
                             onSearch={handleTvboxSearch}
@@ -2545,6 +2613,98 @@ export default function App() {
         )}
 
       </main>
+
+      {/* ==========================================================
+          SEARCH MODAL: TMDB Movie Search
+          ========================================================== */}
+      {showSearchModal && (
+        <div className="fixed inset-0 z-55 flex items-start justify-center bg-black/65 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl w-full max-w-2xl p-6 space-y-5 text-left shadow-2xl animate-zoom-in my-8 max-h-[90vh] overflow-y-auto">
+            
+            <div className="flex items-center justify-between border-b border-neutral-150 dark:border-neutral-800 pb-3">
+              <h3 className="text-lg font-black dark:text-white tracking-tight">搜索影片</h3>
+              <button
+                onClick={() => {
+                  setShowSearchModal(false);
+                  setSearchInputValue('');
+                  setTmdbSearchResults([]);
+                }}
+                className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full cursor-pointer text-neutral-400 hover:text-rose-500 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="输入影片名称、演员、导演..."
+                value={searchInputValue}
+                onChange={(e) => setSearchInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && searchInputValue.trim()) {
+                    handleTmdbSearch(searchInputValue.trim());
+                  }
+                }}
+                className="flex-1 px-4 py-2.5 bg-neutral-100 dark:bg-neutral-950 border-0 rounded-xl text-sm font-semibold text-neutral-900 dark:text-white placeholder-neutral-400"
+              />
+              <button
+                onClick={() => searchInputValue.trim() && handleTmdbSearch(searchInputValue.trim())}
+                disabled={tmdbSearchLoading}
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-300 text-white rounded-xl text-sm font-bold cursor-pointer transition-colors flex items-center gap-2"
+              >
+                {tmdbSearchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                搜索
+              </button>
+            </div>
+
+            {tmdbSearchResults.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {tmdbSearchResults.map(item => (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      navigateTo(`#/detail/${item.id}`);
+                      setShowSearchModal(false);
+                      setSearchInputValue('');
+                      setTmdbSearchResults([]);
+                    }}
+                    className="group cursor-pointer text-left"
+                  >
+                    <div className="aspect-[2/3] rounded-xl overflow-hidden bg-neutral-100 dark:bg-neutral-800 mb-2">
+                      <img
+                        src={getTmdbImageUrl(item.poster_path, 'w300')}
+                        alt={item.title || item.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                      />
+                    </div>
+                    <p className="text-xs font-semibold text-neutral-900 dark:text-white truncate group-hover:text-blue-600 transition-colors">
+                      {item.title || item.name}
+                    </p>
+                    <p className="text-[10px] text-neutral-400">
+                      {item.release_date || item.first_air_date || '未知'}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {tmdbSearchLoading && (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                <span className="ml-2 text-sm text-neutral-500">搜索中...</span>
+              </div>
+            )}
+
+            {!tmdbSearchLoading && tmdbSearchResults.length === 0 && searchInputValue && (
+              <div className="text-center py-12 text-neutral-400">
+                <p className="text-sm">输入关键词开始搜索</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ==========================================================
           MODAL COMPONENT: ADD/EDIT MOVIE DETAILS POPUP
