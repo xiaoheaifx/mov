@@ -90,30 +90,55 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack }: TMDBDetail
     setSearchingSources(true);
     setSourceResults([]);
     try {
+      console.log(`[TMDBDetailPage] Starting search for: "${keyword}"`);
       const vsRes = await fetch('/api/video-sources');
-      if (!vsRes.ok) return;
+      if (!vsRes.ok) {
+        console.error('[TMDBDetailPage] Failed to fetch video sources:', vsRes.status, vsRes.statusText);
+        return;
+      }
       const sources: VideoSource[] = await vsRes.json();
       setVideoSources(sources);
+      console.log(`[TMDBDetailPage] Found ${sources.length} video sources:`, sources.map(s => ({ id: s.id, name: s.name, api: s.api })));
 
-      if (sources.length === 0) return;
+      if (sources.length === 0) {
+        console.log('[TMDBDetailPage] No video sources configured');
+        return;
+      }
 
       const results: Array<{ sourceName: string; sourceId: string; lines: VideoSourcePlayLine[] }> = [];
       
       for (const source of sources) {
         try {
-          const searchRes = await fetch(`/api/video-sources/search?sourceId=${encodeURIComponent(source.id)}&wd=${encodeURIComponent(keyword)}`);
-          if (!searchRes.ok) continue;
+          console.log(`[TMDBDetailPage] Searching source: ${source.name} (${source.id})`);
+          const searchUrl = `/api/video-sources/search?sourceId=${encodeURIComponent(source.id)}&wd=${encodeURIComponent(keyword)}`;
+          console.log(`[TMDBDetailPage] Search URL: ${searchUrl}`);
+          
+          const searchRes = await fetch(searchUrl);
+          if (!searchRes.ok) {
+            console.warn(`[TMDBDetailPage] Search failed for ${source.name}: HTTP ${searchRes.status}`);
+            const errorText = await searchRes.text();
+            console.warn(`[TMDBDetailPage] Error response:`, errorText);
+            continue;
+          }
           const data = await searchRes.json();
+          console.log(`[TMDBDetailPage] Source ${source.name} search result:`, JSON.stringify(data).substring(0, 500));
+          
           if (data.list && data.list.length > 0) {
             const firstItem = data.list[0];
             const vodId = firstItem.vod_id;
+            console.log(`[TMDBDetailPage] Found match in ${source.name}: ${firstItem.vod_name} (ID: ${vodId})`);
             
             const detailRes = await fetch(`/api/video-sources/detail?sourceId=${encodeURIComponent(source.id)}&ids=${vodId}`);
             if (detailRes.ok) {
               const detailData = await detailRes.json();
               if (detailData.list && detailData.list.length > 0) {
                 const vod = detailData.list[0];
+                console.log(`[TMDBDetailPage] Detail data for ${vod.vod_name}:`, {
+                  play_from: vod.vod_play_from,
+                  play_url_preview: vod.vod_play_url?.substring(0, 200) + '...'
+                });
                 const lines = parsePlayLines(vod.vod_play_from || '', vod.vod_play_url || '');
+                console.log(`[TMDBDetailPage] Parsed ${lines.length} lines from ${source.name}:`, lines.map(l => ({ source: l.source, episodes: l.episodes.length })));
                 if (lines.length > 0) {
                   results.push({
                     sourceName: source.name,
@@ -121,14 +146,21 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack }: TMDBDetail
                     lines
                   });
                 }
+              } else {
+                console.log(`[TMDBDetailPage] No detail data found for ${vodId}`);
               }
+            } else {
+              console.warn(`[TMDBDetailPage] Detail request failed: HTTP ${detailRes.status}`);
             }
+          } else {
+            console.log(`[TMDBDetailPage] No matches found in ${source.name}`);
           }
-        } catch {
-          // Skip failed sources
+        } catch (err) {
+          console.error(`[TMDBDetailPage] Error searching source ${source.name}:`, err);
         }
       }
 
+      console.log(`[TMDBDetailPage] Total results: ${results.length}`);
       setSourceResults(results);
       if (results.length > 0) {
         setActiveSourceId(results[0].sourceId);
@@ -137,7 +169,7 @@ export default function TMDBDetailPage({ item, getImageUrl, onBack }: TMDBDetail
         setSelectedEpisode(0);
       }
     } catch (e) {
-      console.error('Error searching video sources:', e);
+      console.error('[TMDBDetailPage] Error searching video sources:', e);
     } finally {
       setSearchingSources(false);
     }

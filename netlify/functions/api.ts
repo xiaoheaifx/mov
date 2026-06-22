@@ -804,6 +804,192 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
     }
 
     // ==========================================
+    // TV Live Stream Sources Management
+    // ==========================================
+
+    // GET /admin/live-sources - List all live sources
+    if (path === '/admin/live-sources' && method === 'GET') {
+      const auth = await adminAuthMiddleware(event);
+      if (auth.error) return auth.error;
+
+      const liveSources = await getCollection('liveSources');
+      return { statusCode: 200, body: JSON.stringify(Object.values(liveSources)) };
+    }
+
+    // POST /admin/live-sources - Add live source
+    if (path === '/admin/live-sources' && method === 'POST') {
+      const auth = await adminAuthMiddleware(event);
+      if (auth.error) return auth.error;
+
+      const { name, type, url, group } = body;
+      if (!name || !type || !url) {
+        return { statusCode: 400, body: JSON.stringify({ error: '名称、类型和URL为必填项' }) };
+      }
+
+      const liveSources = await getCollection('liveSources');
+      const id = `live_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      const newSource: any = {
+        id,
+        name,
+        type, // 'm3u' or 'txt'
+        url,
+        group: group || '',
+        channels: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      liveSources[id] = newSource;
+      await setCollection('liveSources', liveSources);
+
+      return { statusCode: 200, body: JSON.stringify({ success: true, liveSource: newSource }) };
+    }
+
+    // PUT /admin/live-sources/:id - Update live source
+    if (path.match(/^\/admin\/live-sources\/[^/]+$/) && method === 'PUT') {
+      const auth = await adminAuthMiddleware(event);
+      if (auth.error) return auth.error;
+
+      const id = path.split('/')[3];
+      const { name, type, url, group } = body;
+
+      const liveSources = await getCollection('liveSources');
+      const existing = liveSources[id];
+
+      if (!existing) {
+        return { statusCode: 404, body: JSON.stringify({ error: '直播源未找到' }) };
+      }
+
+      const updated: any = {
+        ...existing,
+        name: name ?? existing.name,
+        type: type ?? existing.type,
+        url: url ?? existing.url,
+        group: group ?? existing.group,
+        updatedAt: new Date().toISOString()
+      };
+
+      liveSources[id] = updated;
+      await setCollection('liveSources', liveSources);
+
+      return { statusCode: 200, body: JSON.stringify({ success: true, liveSource: updated }) };
+    }
+
+    // DELETE /admin/live-sources/:id - Delete live source
+    if (path.match(/^\/admin\/live-sources\/[^/]+$/) && method === 'DELETE') {
+      const auth = await adminAuthMiddleware(event);
+      if (auth.error) return auth.error;
+
+      const id = path.split('/')[3];
+      const liveSources = await getCollection('liveSources');
+
+      if (!liveSources[id]) {
+        return { statusCode: 404, body: JSON.stringify({ error: '直播源未找到' }) };
+      }
+
+      delete liveSources[id];
+      await setCollection('liveSources', liveSources);
+
+      return { statusCode: 200, body: JSON.stringify({ success: true, message: '直播源已删除' }) };
+    }
+
+    // GET /live-sources - Public API to get all live sources
+    if (path === '/live-sources' && method === 'GET') {
+      const liveSources = await getCollection('liveSources');
+      return { statusCode: 200, body: JSON.stringify(Object.values(liveSources)) };
+    }
+
+    // POST /live-sources/parse - Parse M3U or TXT live source
+    if (path === '/live-sources/parse' && method === 'POST') {
+      const { url, type } = body;
+      if (!url) {
+        return { statusCode: 400, body: JSON.stringify({ error: '请提供直播源URL' }) };
+      }
+
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+        
+        const res = await fetch(url, { 
+          signal: controller.signal,
+          headers: { 
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          }
+        });
+        clearTimeout(timeout);
+
+        if (!res.ok) {
+          return { statusCode: 502, body: JSON.stringify({ error: `直播源请求失败: HTTP ${res.status}` }) };
+        }
+
+        const content = await res.text();
+        const channels: any[] = [];
+
+        if (type === 'm3u' || content.startsWith('#EXTM3U')) {
+          // Parse M3U format
+          const lines = content.split('\n');
+          let currentChannel: any = null;
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('#EXTINF:')) {
+              // Parse channel info
+              const nameMatch = trimmed.match(/,(.+)$/);
+              const groupMatch = trimmed.match(/group-title="([^"]*)"/);
+              const logoMatch = trimmed.match(/tvg-logo="([^"]*)"/);
+              
+              currentChannel = {
+                name: nameMatch ? nameMatch[1].trim() : '未知频道',
+                group: groupMatch ? groupMatch[1] : '',
+                logo: logoMatch ? logoMatch[1] : '',
+                url: ''
+              };
+            } else if (trimmed && !trimmed.startsWith('#') && currentChannel) {
+              currentChannel.url = trimmed;
+              channels.push(currentChannel);
+              currentChannel = null;
+            }
+          }
+        } else {
+          // Parse TXT format (group,#genre# and channel,url)
+          const lines = content.split('\n');
+          let currentGroup = '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+
+            if (trimmed.includes(',#genre#')) {
+              currentGroup = trimmed.replace(',#genre#', '').trim();
+            } else if (trimmed.includes(',')) {
+              const parts = trimmed.split(',');
+              if (parts.length >= 2) {
+                channels.push({
+                  name: parts[0].trim(),
+                  group: currentGroup,
+                  url: parts.slice(1).join(',').trim(),
+                  logo: ''
+                });
+              }
+            }
+          }
+        }
+
+        return {
+          statusCode: 200,
+          body: JSON.stringify({
+            success: true,
+            channels,
+            total: channels.length
+          })
+        };
+      } catch (e: any) {
+        return { statusCode: 502, body: JSON.stringify({ error: `直播源解析失败: ${e.message || '网络错误'}` }) };
+      }
+    }
+
+    // ==========================================
     // Health Check (Diagnostic)
     // ==========================================
 
@@ -988,27 +1174,40 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       
       try {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15000);
-        const apiRes = await fetch(url, { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const timeout = setTimeout(() => controller.abort(), 30000);
+        
+        // Use more browser-like headers to avoid being blocked
+        const apiRes = await fetch(url, { 
+          signal: controller.signal, 
+          headers: { 
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            'Referer': url
+          },
+          redirect: 'follow'
+        });
         clearTimeout(timeout);
         
         if (!apiRes.ok) {
-          return { statusCode: 502, body: JSON.stringify({ error: `TVBox接口请求失败: HTTP ${apiRes.status}` }) };
+          return { statusCode: 502, body: JSON.stringify({ error: `TVBox接口请求失败: HTTP ${apiRes.status} ${apiRes.statusText}` }) };
         }
         
         let config: any;
         try {
           const text = await apiRes.text();
-          config = JSON.parse(text);
-        } catch {
-          return { statusCode: 502, body: JSON.stringify({ error: 'TVBox配置JSON解析失败，请检查接口地址' }) };
+          // Clean up BOM and whitespace
+          const cleanText = text.trim().replace(/^\uFEFF/, '');
+          config = JSON.parse(cleanText);
+        } catch (parseErr: any) {
+          return { statusCode: 502, body: JSON.stringify({ error: `TVBox配置JSON解析失败: ${parseErr.message}。请确认接口地址返回的是有效的JSON格式。` }) };
         }
 
         if (!config.sites || !Array.isArray(config.sites)) {
-          return { statusCode: 502, body: JSON.stringify({ error: 'TVBox配置格式不正确，缺少sites字段' }) };
+          return { statusCode: 502, body: JSON.stringify({ error: 'TVBox配置格式不正确，缺少sites字段。请确认这是有效的TVBox接口地址。' }) };
         }
 
-        const httpSites = config.sites.filter((s: any) => s.type === 0 || s.type === 1);
+        // Include ALL site types, not just 0 and 1
         const allSites = config.sites.map((s: any) => ({
           key: s.key,
           name: s.name,
@@ -1019,6 +1218,8 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
           quickSearch: s.quickSearch ?? 1,
           filterable: s.filterable ?? 1
         }));
+
+        const httpSites = config.sites.filter((s: any) => s.type === 0 || s.type === 1);
 
         return {
           statusCode: 200,
@@ -1031,7 +1232,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
           })
         };
       } catch (e: any) {
-        return { statusCode: 502, body: JSON.stringify({ error: 'TVBox接口解析失败: ' + (e.message || '网络错误') }) };
+        return { statusCode: 502, body: JSON.stringify({ error: `TVBox接口解析失败: ${e.message || '网络错误'}。请检查接口地址是否有效，或接口服务器是否可访问。` }) };
       }
     }
 

@@ -39,7 +39,7 @@ import {
   Skull,
   Zap
 } from 'lucide-react';
-import { Movie, TMDBMovie, TVBoxSite, TVBoxVideoItem, TVBoxVideoDetail, PosterSearchResult, VideoSource } from './types.js';
+import { Movie, TMDBMovie, TVBoxSite, TVBoxVideoItem, TVBoxVideoDetail, PosterSearchResult, VideoSource, LiveSource, LiveChannel } from './types.js';
 import MovieCard from './components/MovieCard.js';
 import VideoPlayer from './components/VideoPlayer.js';
 import HeroCarousel from './components/HeroCarousel.js';
@@ -48,7 +48,7 @@ import TVBoxPanel from './components/TVBoxPanel.js';
 import TMDBDetailModal from './components/TMDBDetailModal.js';
 import TMDBDetailPage from './components/TMDBDetailPage.js';
 
-type PageRoute = 'home' | 'movie-detail' | 'detail' | 'viewer-login' | 'admin-login' | 'admin-dashboard' | 'tvbox-play' | 'movies' | 'tv' | 'anime' | 'variety';
+type PageRoute = 'home' | 'movie-detail' | 'detail' | 'viewer-login' | 'admin-login' | 'admin-dashboard' | 'tvbox-play' | 'movies' | 'tv' | 'anime' | 'variety' | 'live';
 
 function TMDBDetailRoute({ tmdbId, getImageUrl, tmdbCache, onBack }: {
   tmdbId: string;
@@ -168,7 +168,7 @@ export default function App() {
   const [adminUsers, setAdminUsers] = useState<Array<{ username: string; createdAt: string; role: 'viewer' }>>([]);
   const [adminStreamers, setAdminStreamers] = useState<Array<{ username: string; createdAt: string; role: 'streamer' }>>([]);
   const [dashLoading, setDashLoading] = useState(false);
-  const [dashActiveTab, setDashActiveTab] = useState<'video-sources' | 'movies' | 'users' | 'streamers' | 'tvbox'>('video-sources');
+  const [dashActiveTab, setDashActiveTab] = useState<'video-sources' | 'movies' | 'users' | 'streamers' | 'tvbox' | 'live-sources'>('video-sources');
 
   // Search, Filters & View Options
   const [searchQuery, setSearchQuery] = useState('');
@@ -239,6 +239,17 @@ export default function App() {
   const [tvboxPlayUrl, setTvboxPlayUrl] = useState<string>('');
   const [tvboxPlayName, setTvboxPlayName] = useState<string>('');
 
+  // Live Stream Sources States
+  const [liveSources, setLiveSources] = useState<LiveSource[]>([]);
+  const [liveSourceLoading, setLiveSourceLoading] = useState(false);
+  const [liveSourceForm, setLiveSourceForm] = useState({ name: '', type: 'm3u' as 'm3u' | 'txt', url: '', group: '' });
+  const [editingLiveSource, setEditingLiveSource] = useState<LiveSource | null>(null);
+  const [liveSourceModalOpen, setLiveSourceModalOpen] = useState(false);
+  const [liveChannels, setLiveChannels] = useState<LiveChannel[]>([]);
+  const [liveParseLoading, setLiveParseLoading] = useState(false);
+  const [liveParseError, setLiveParseError] = useState<string | null>(null);
+  const [selectedLiveChannel, setSelectedLiveChannel] = useState<LiveChannel | null>(null);
+
   // Video Source States
   const [videoSources, setVideoSources] = useState<VideoSource[]>([]);
   const [videoSourceLoading, setVideoSourceLoading] = useState(false);
@@ -302,6 +313,8 @@ export default function App() {
         setCurrentRoute('anime');
       } else if (hash === '#/variety') {
         setCurrentRoute('variety');
+      } else if (hash === '#/live') {
+        setCurrentRoute('live');
       } else if (hash === '#/tvbox/play') {
         setCurrentRoute('tvbox-play');
       } else if (hash.startsWith('#/detail/')) {
@@ -502,10 +515,12 @@ export default function App() {
   const loadVideoSources = async () => {
     setVideoSourceLoading(true);
     try {
-      const res = await fetch('/api/admin/video-sources');
+      const res = await fetch('/api/admin/video-sources', { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
         setVideoSources(data);
+      } else {
+        console.error('Failed to load video sources:', res.status, res.statusText);
       }
     } catch (err) {
       console.error('Error loading video sources:', err);
@@ -529,7 +544,8 @@ export default function App() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(videoSourceForm)
+        body: JSON.stringify(videoSourceForm),
+        credentials: 'include'
       });
       const data = await res.json();
 
@@ -550,7 +566,7 @@ export default function App() {
   const handleDeleteVideoSource = async (id: string, name: string) => {
     if (!confirm(`确定要删除视频源"${name}"吗？`)) return;
     try {
-      const res = await fetch(`/api/admin/video-sources/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/admin/video-sources/${id}`, { method: 'DELETE', credentials: 'include' });
       const data = await res.json();
       if (res.ok && data.success) {
         showToast('视频源已删除', 'success');
@@ -572,6 +588,111 @@ export default function App() {
       detail: source.detail || ''
     });
     setVideoSourceModalOpen(true);
+  };
+
+  // Live Stream Sources CRUD handlers
+  const loadLiveSources = async () => {
+    setLiveSourceLoading(true);
+    try {
+      const res = await fetch('/api/admin/live-sources', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setLiveSources(data);
+      } else {
+        console.error('Failed to load live sources:', res.status, res.statusText);
+      }
+    } catch (err) {
+      console.error('Error loading live sources:', err);
+    } finally {
+      setLiveSourceLoading(false);
+    }
+  };
+
+  const handleLiveSourceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!liveSourceForm.name || !liveSourceForm.type || !liveSourceForm.url) {
+      showToast('名称、类型和URL为必填项', 'error');
+      return;
+    }
+
+    try {
+      const isEditing = !!editingLiveSource;
+      const url = isEditing ? `/api/admin/live-sources/${editingLiveSource.id}` : '/api/admin/live-sources';
+      const method = isEditing ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(liveSourceForm),
+        credentials: 'include'
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        showToast(isEditing ? '直播源更新成功' : '直播源添加成功', 'success');
+        setLiveSourceModalOpen(false);
+        setEditingLiveSource(null);
+        setLiveSourceForm({ name: '', type: 'm3u', url: '', group: '' });
+        loadLiveSources();
+      } else {
+        showToast(data.error || '操作失败', 'error');
+      }
+    } catch (err) {
+      showToast('网络请求失败', 'error');
+    }
+  };
+
+  const handleDeleteLiveSource = async (id: string, name: string) => {
+    if (!confirm(`确定要删除直播源"${name}"吗？`)) return;
+    try {
+      const res = await fetch(`/api/admin/live-sources/${id}`, { method: 'DELETE', credentials: 'include' });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast('直播源已删除', 'success');
+        loadLiveSources();
+      } else {
+        showToast(data.error || '删除失败', 'error');
+      }
+    } catch (err) {
+      showToast('网络请求失败', 'error');
+    }
+  };
+
+  const startEditLiveSource = (source: LiveSource) => {
+    setEditingLiveSource(source);
+    setLiveSourceForm({
+      name: source.name,
+      type: source.type,
+      url: source.url,
+      group: source.group || ''
+    });
+    setLiveSourceModalOpen(true);
+  };
+
+  const handleParseLiveSource = async (url: string, type: 'm3u' | 'txt') => {
+    setLiveParseLoading(true);
+    setLiveParseError(null);
+    setLiveChannels([]);
+    try {
+      const res = await fetch('/api/live-sources/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, type })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setLiveChannels(data.channels);
+        showToast(`解析成功，共 ${data.total} 个频道`, 'success');
+      } else {
+        setLiveParseError(data.error || '解析失败');
+        showToast(data.error || '解析失败', 'error');
+      }
+    } catch (err) {
+      setLiveParseError('网络请求失败');
+      showToast('网络请求失败', 'error');
+    } finally {
+      setLiveParseLoading(false);
+    }
   };
 
   // Fetch full details of single selected movie
@@ -615,6 +736,8 @@ export default function App() {
       setDashLoading(true);
       if (dashActiveTab === 'video-sources') {
         await loadVideoSources();
+      } else if (dashActiveTab === 'live-sources' && currentUser.role === 'admin') {
+        await loadLiveSources();
       } else if (dashActiveTab === 'movies') {
         const res = await fetch('/api/admin/movies');
         if (res.ok) setAdminMovies(await res.json());
@@ -988,6 +1111,7 @@ export default function App() {
             <button onClick={() => navigateTo('#/tv')} className={`text-lg font-medium transition-colors ${currentRoute === 'tv' ? 'text-red-600' : 'text-gray-500 hover:text-neutral-900'}`}>剧集</button>
             <button onClick={() => navigateTo('#/anime')} className={`text-lg font-medium transition-colors ${currentRoute === 'anime' ? 'text-red-600' : 'text-gray-500 hover:text-neutral-900'}`}>动漫</button>
             <button onClick={() => navigateTo('#/variety')} className={`text-lg font-medium transition-colors ${currentRoute === 'variety' ? 'text-red-600' : 'text-gray-500 hover:text-neutral-900'}`}>综艺</button>
+            <button onClick={() => navigateTo('#/live')} className={`text-lg font-medium transition-colors ${currentRoute === 'live' ? 'text-red-600' : 'text-gray-500 hover:text-neutral-900'}`}>电视直播</button>
           </nav>
 
           {/* Right Controls */}
@@ -1719,6 +1843,105 @@ export default function App() {
         )}
 
         {/* ====================================
+            VIEW: LIVE TV
+            ==================================== */}
+        {currentRoute === 'live' && (
+          <div id="route-live" className="space-y-6 animate-fade-in text-left">
+            <button
+              onClick={() => navigateTo('#/')}
+              className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-blue-400 font-bold cursor-pointer py-1 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" /> 返回主页
+            </button>
+
+            <div className="space-y-4">
+              <h1 className="text-2xl font-bold text-neutral-900 dark:text-white">电视直播</h1>
+              
+              {liveSources.length === 0 ? (
+                <div className="bg-neutral-50 dark:bg-neutral-900 rounded-2xl p-8 text-center border border-neutral-200 dark:border-neutral-800">
+                  <p className="text-neutral-400">暂无电视直播源，请先在后台管理添加直播源</p>
+                  <button
+                    onClick={() => navigateTo('#/admin/dashboard')}
+                    className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl"
+                  >
+                    前往后台管理
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {liveSources.map(source => (
+                    <div key={source.id} className="bg-neutral-50 dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 overflow-hidden">
+                      <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-950">
+                        <h2 className="font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+                          <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                            source.type === 'm3u' 
+                              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' 
+                              : 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                          }`}>
+                            {source.type.toUpperCase()}
+                          </span>
+                          {source.name}
+                          {source.group && <span className="text-xs text-neutral-400">({source.group})</span>}
+                        </h2>
+                      </div>
+                      
+                      <div className="p-4">
+                        {source.channels && source.channels.length > 0 ? (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                            {source.channels.map((channel, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => {
+                                  setSelectedLiveChannel(channel);
+                                  setTvboxPlayUrl(channel.url);
+                                  setTvboxPlayName(channel.name);
+                                }}
+                                className={`p-3 rounded-xl text-xs font-semibold text-center transition-all cursor-pointer ${
+                                  selectedLiveChannel?.url === channel.url
+                                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+                                    : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-200 dark:hover:bg-neutral-750'
+                                }`}
+                              >
+                                {channel.name}
+                                {channel.group && (
+                                  <div className="text-[10px] opacity-70 mt-0.5">{channel.group}</div>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-4 text-neutral-400 text-sm">
+                            暂无频道数据，请点击解析加载频道
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Live TV Player */}
+            {tvboxPlayUrl && (
+              <div className="bg-slate-900/50 p-4 sm:p-6 rounded-2xl border border-slate-800 shadow-2xl space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-800/60 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <h2 className="font-bold text-lg text-white">{tvboxPlayName || '正在播放'}</h2>
+                  </div>
+                  <span className="text-[10px] bg-green-500/10 text-green-400 px-2 py-0.5 rounded font-mono font-bold tracking-widest uppercase border border-green-500/20">
+                    LIVE TV
+                  </span>
+                </div>
+                <div className="aspect-video">
+                  <VideoPlayer src={tvboxPlayUrl} title={tvboxPlayName || '电视直播'} />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ====================================
             VIEW: TVBOX PLAY
             ==================================== */}
         {currentRoute === 'tvbox-play' && tvboxPlayingDetail && (
@@ -1973,21 +2196,21 @@ export default function App() {
                     📡 个人视频源 ({videoSources.length})
                   </button>
 
-                  <button
-                    id="tab-movies-control"
-                    onClick={() => setDashActiveTab('movies')}
-                    className={`px-5 py-3 text-xs sm:text-sm font-semibold border-b-2 cursor-pointer transition-colors ${
-                      dashActiveTab === 'movies'
-                        ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
-                        : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:text-neutral-400'
-                    }`}
-                  >
-                    🎬 电影播放源发布 ({adminMovies.length || movies.length})
-                  </button>
-
                   {/* Super admin tabs */}
                   {currentUser.role === 'admin' && (
                     <>
+                      <button
+                        id="tab-live-sources-control"
+                        onClick={() => setDashActiveTab('live-sources')}
+                        className={`px-5 py-3 text-xs sm:text-sm font-semibold border-b-2 cursor-pointer transition-colors ${
+                          dashActiveTab === 'live-sources'
+                            ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
+                            : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:text-neutral-400'
+                        }`}
+                      >
+                         电视直播源管理
+                      </button>
+
                       <button
                         id="tab-tvbox-control"
                         onClick={() => setDashActiveTab('tvbox')}
@@ -1997,7 +2220,7 @@ export default function App() {
                             : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:text-neutral-400'
                         }`}
                       >
-                        📡 TVBox接口管理
+                         TVBox接口管理
                       </button>
 
                       <button
@@ -2010,18 +2233,6 @@ export default function App() {
                         }`}
                       >
                         👥 一般观众账号管理
-                      </button>
-
-                      <button
-                        id="tab-streamers-control"
-                        onClick={() => setDashActiveTab('streamers')}
-                        className={`px-5 py-3 text-xs sm:text-sm font-semibold border-b-2 cursor-pointer transition-colors ${
-                          dashActiveTab === 'streamers'
-                            ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
-                            : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:text-neutral-400'
-                        }`}
-                      >
-                        🛡️ 直播员成员档案
                       </button>
                     </>
                   )}
@@ -2115,96 +2326,61 @@ export default function App() {
                         </div>
                       )}
 
-                      {/* Sub-tab 1: Movies List Controller */}
-                      {dashActiveTab === 'movies' && (
-                        <div id="dash-movies-tab-content" className="space-y-4">
+                      {/* Sub-tab 1: Live Stream Sources Management */}
+                      {dashActiveTab === 'live-sources' && currentUser.role === 'admin' && (
+                        <div id="dash-live-sources-tab-content" className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="font-bold text-sm dark:text-white">电视直播源列表</h3>
+                            <button
+                              onClick={() => {
+                                setEditingLiveSource(null);
+                                setLiveSourceForm({ name: '', type: 'm3u', url: '', group: '' });
+                                setLiveSourceModalOpen(true);
+                              }}
+                              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow shadow-blue-500/10 cursor-pointer"
+                            >
+                              <Plus className="w-4 h-4" /> 添加直播源
+                            </button>
+                          </div>
                           <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse text-xs sm:text-xs">
                               <thead>
                                 <tr className="border-b border-neutral-100 dark:border-neutral-800 text-neutral-400 font-bold tracking-wide">
-                                  <th className="py-3 px-2">海报/标题</th>
-                                  <th className="py-3 px-2 hidden sm:table-cell">核心标签</th>
-                                  <th className="py-3 px-2 hidden md:table-cell font-mono">视频播放源 URL</th>
-                                  <th className="py-3 px-2">播放源有效性</th>
+                                  <th className="py-3 px-2">名称</th>
+                                  <th className="py-3 px-2">类型</th>
+                                  <th className="py-3 px-2 hidden md:table-cell font-mono">URL地址</th>
+                                  <th className="py-3 px-2 hidden sm:table-cell">分组</th>
                                   <th className="py-3 px-2 text-right">管理操作</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-850">
-                                {adminMovies.map(movie => (
-                                  <tr key={movie.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-950/40 transition-colors">
+                                {liveSources.map(source => (
+                                  <tr key={source.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-950/40 transition-colors">
+                                    <td className="py-3 px-2 font-semibold text-neutral-900 dark:text-white">{source.name}</td>
                                     <td className="py-3 px-2">
-                                      <div className="flex items-center gap-3">
-                                        <img
-                                          src={movie.coverUrl}
-                                          alt={movie.title}
-                                          className="w-14 h-9 object-cover rounded-md flex-shrink-0"
-                                          referrerPolicy="no-referrer"
-                                        />
-                                        <div className="min-w-0">
-                                          <div className="font-bold text-neutral-950 dark:text-white truncate max-w-[140px] sm:max-w-xs">{movie.title}</div>
-                                          <div className="text-[10px] text-neutral-400 mt-0.5">{movie.duration}</div>
-                                        </div>
-                                      </div>
-                                    </td>
-                                    
-                                    <td className="py-3 px-2 hidden sm:table-cell">
-                                      <span className="inline-block bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 px-2 py-0.5 rounded font-medium">
-                                        {movie.genre}
+                                      <span className={`inline-block px-2 py-0.5 rounded font-medium text-xs ${
+                                        source.type === 'm3u' 
+                                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' 
+                                          : 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                                      }`}>
+                                        {source.type.toUpperCase()}
                                       </span>
                                     </td>
-
-                                    <td className="py-3 px-2 hidden md:table-cell font-mono text-neutral-400 max-w-[200px] truncate">
-                                      {movie.streamUrl}
-                                    </td>
-
-                                    <td className="py-3 px-2">
-                                      {movie.streamValid === true ? (
-                                        <div className="flex flex-col gap-0.5 text-left">
-                                          <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-semibold font-bold">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> 有效 (200/206)
-                                          </span>
-                                          {movie.streamCheckTime && (
-                                            <span className="text-[10px] text-neutral-400 tracking-tighter">
-                                              {new Date(movie.streamCheckTime).toLocaleTimeString()}
-                                            </span>
-                                          )}
-                                        </div>
-                                      ) : movie.streamValid === false ? (
-                                        <div className="flex flex-col gap-0.5 text-left">
-                                          <span className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400 font-semibold font-bold">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> 连接失败/失效
-                                          </span>
-                                          {movie.streamCheckTime && (
-                                            <span className="text-[10px] text-neutral-400 tracking-tighter">
-                                              {new Date(movie.streamCheckTime).toLocaleTimeString()}
-                                            </span>
-                                          )}
-                                        </div>
-                                      ) : (
-                                        <span className="text-neutral-400 italic">尚未检测</span>
-                                      )}
-                                    </td>
-
+                                    <td className="py-3 px-2 hidden md:table-cell font-mono text-neutral-400 max-w-[200px] truncate">{source.url}</td>
+                                    <td className="py-3 px-2 hidden sm:table-cell text-neutral-500">{source.group || '-'}</td>
                                     <td className="py-3 px-2 text-right">
                                       <div className="inline-flex items-center gap-1">
                                         <button
-                                          onClick={() => checkMovieStream(movie.id, movie.streamUrl)}
-                                          className="p-1 px-2 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-750 text-neutral-600 dark:text-neutral-300 rounded text-[10px] font-bold cursor-pointer inline-flex items-center gap-1"
-                                          title="校验此电影源响应状态码"
-                                        >
-                                          <RefreshCw className="w-3 h-3" /> 检测
-                                        </button>
-                                        <button
-                                          onClick={() => startEditMovie(movie)}
+                                          onClick={() => startEditLiveSource(source)}
                                           className="p-1 text-blue-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded cursor-pointer"
-                                          title="编辑电影参数"
+                                          title="编辑直播源"
                                         >
                                           <Edit className="w-3.5 h-3.5" />
                                         </button>
                                         <button
-                                          onClick={() => deleteMovie(movie.id, movie.title)}
+                                          onClick={() => handleDeleteLiveSource(source.id, source.name)}
                                           className="p-1 text-rose-500 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded cursor-pointer"
-                                          title="彻底删除"
+                                          title="删除直播源"
                                         >
                                           <Trash2 className="w-3.5 h-3.5" />
                                         </button>
@@ -2212,10 +2388,10 @@ export default function App() {
                                     </td>
                                   </tr>
                                 ))}
-                                {adminMovies.length === 0 && (
+                                {liveSources.length === 0 && (
                                   <tr>
                                     <td colSpan={5} className="py-8 text-center text-neutral-400 italic">
-                                      片库暂无电影数据，请点击右上角新增。
+                                      暂无电视直播源，请点击右上角添加。支持M3U和TXT格式，支持IPV4和IPV6。
                                     </td>
                                   </tr>
                                 )}
@@ -2324,105 +2500,7 @@ export default function App() {
                         </div>
                       )}
 
-                      {/* Sub-tab 3: Streamer accounts Management */}
-                      {dashActiveTab === 'streamers' && currentUser.role === 'admin' && (
-                        <div id="dash-streamer-tab-content" className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                          {/* Left creator */}
-                          <div className="bg-neutral-50 dark:bg-neutral-950 p-5 rounded-2xl border border-neutral-200/50 dark:border-neutral-850 text-left space-y-4 h-fit">
-                            <h3 className="font-bold text-sm tracking-tight flex items-center gap-1 dark:text-white">
-                              <Plus className="w-4 h-4 text-purple-500" /> 新建直播编辑成员账号
-                            </h3>
-                            <p className="text-[11px] text-neutral-400">
-                              拥有直播员角色（Streamer）的用户，只能管理电影，绝对没有权力接触用户或者是注销其他同僚成员账号。
-                            </p>
-                            
-                            <form onSubmit={addStreamerAccount} className="space-y-3">
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-neutral-500 uppercase">工作后台登录卡号/名称</label>
-                                <input
-                                  type="text"
-                                  placeholder="限制至少3位，如: st_zhang"
-                                  value={newStreamerName}
-                                  onChange={e => setNewStreamerName(e.target.value)}
-                                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg text-xs font-semibold"
-                                />
-                              </div>
-
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-neutral-500 uppercase">设置登录验证密码</label>
-                                <input
-                                  type="password"
-                                  placeholder="输入该直播员密码口令..."
-                                  value={newStreamerPass}
-                                  onChange={e => setNewStreamerPass(e.target.value)}
-                                  className="w-full px-3 py-2 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-lg text-xs"
-                                />
-                              </div>
-
-                              <button
-                                type="submit"
-                                className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs rounded-lg cursor-pointer transition-colors flex items-center justify-center gap-1"
-                              >
-                                <UserCheck className="w-3.5 h-3.5" /> 录入直播员席位
-                              </button>
-                            </form>
-                          </div>
-
-                          {/* Right list */}
-                          <div className="lg:col-span-2 space-y-4">
-                            <div className="flex items-center gap-1.5 text-xs text-neutral-400 font-bold mb-1">
-                              <span>已签发直播发布员列表 ({adminStreamers.length})</span>
-                            </div>
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-left border-collapse text-xs">
-                                <thead>
-                                  <tr className="border-b border-neutral-100 dark:border-neutral-800 text-neutral-400 font-bold">
-                                    <th className="py-2.5 px-2">工作账号名称</th>
-                                    <th className="py-2.5 px-2">受控角色权限</th>
-                                    <th className="py-2.5 px-2">建档入职时间</th>
-                                    <th className="py-2.5 px-2 text-right">管理操作</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-neutral-100 dark:divide-neutral-850">
-                                  {adminStreamers.map(s => (
-                                    <tr key={s.username} className="hover:bg-neutral-50 dark:hover:bg-neutral-950/20">
-                                      <td className="py-2.5 px-2 font-semibold text-neutral-900 dark:text-white uppercase font-mono tracking-wide">
-                                        {s.username}
-                                      </td>
-                                      <td className="py-2.5 px-2">
-                                        <span className="bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                                          streamer 直播发布员
-                                        </span>
-                                      </td>
-                                      <td className="py-2.5 px-2 text-neutral-400">
-                                        {new Date(s.createdAt).toLocaleString()}
-                                      </td>
-                                      <td className="py-2.5 px-2 text-right">
-                                        <button
-                                          onClick={() => deleteStreamerAccount(s.username)}
-                                          className="p-1 text-rose-500 hover:bg-rose-500/10 rounded cursor-pointer"
-                                          title="注销此直播员账号"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                  {adminStreamers.length === 0 && (
-                                    <tr>
-                                      <td colSpan={4} className="py-8 text-center text-neutral-400 italic">
-                                        目前暂无注册在籍的直播发布员。
-                                      </td>
-                                    </tr>
-                                  )}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Sub-tab 4: TVBox Interface Management */}
+                      {/* Sub-tab 3: TVBox Interface Management */}
                       {dashActiveTab === 'tvbox' && currentUser.role === 'admin' && (
                         <div id="dash-tvbox-tab-content" className="space-y-6">
                           <TVBoxPanel
@@ -2580,7 +2658,7 @@ export default function App() {
                 onClick={() => setVideoSourceModalOpen(false)}
                 className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full cursor-pointer text-neutral-400 hover:text-rose-500 transition-colors"
               >
-                ✕
+                
               </button>
             </div>
 
@@ -2646,6 +2724,107 @@ export default function App() {
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors"
                 >
                   {editingVideoSource ? '保存修改' : '添加视频源'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Live Source Form Modal */}
+      {liveSourceModalOpen && (
+        <div id="live-source-form-modal" className="fixed inset-0 z-55 flex items-center justify-center bg-black/65 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-210 dark:border-neutral-800 rounded-3xl w-full max-w-md p-6 space-y-5 text-left shadow-2xl animate-zoom-in my-8">
+            <div className="flex items-center justify-between border-b border-neutral-150 dark:border-neutral-800 pb-3">
+              <h3 className="text-lg font-black dark:text-white tracking-tight">
+                {editingLiveSource ? '编辑直播源' : '添加电视直播源'}
+              </h3>
+              <button
+                onClick={() => setLiveSourceModalOpen(false)}
+                className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full cursor-pointer text-neutral-400 hover:text-rose-500 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleLiveSourceSubmit} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-neutral-500 uppercase">直播源名称</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="例如: 央视卫视直播"
+                  value={liveSourceForm.name}
+                  onChange={e => setLiveSourceForm({ ...liveSourceForm, name: e.target.value })}
+                  className="w-full px-3 py-2.5 bg-neutral-100 dark:bg-neutral-950 border-0 rounded-xl text-xs sm:text-sm font-semibold text-neutral-900 dark:text-white"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-neutral-500 uppercase">直播源类型</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setLiveSourceForm({ ...liveSourceForm, type: 'm3u' })}
+                    className={`flex-1 px-3 py-2.5 rounded-xl text-xs sm:text-sm font-semibold cursor-pointer transition-colors ${
+                      liveSourceForm.type === 'm3u'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-neutral-100 dark:bg-neutral-950 text-neutral-600 dark:text-neutral-400'
+                    }`}
+                  >
+                    M3U格式
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLiveSourceForm({ ...liveSourceForm, type: 'txt' })}
+                    className={`flex-1 px-3 py-2.5 rounded-xl text-xs sm:text-sm font-semibold cursor-pointer transition-colors ${
+                      liveSourceForm.type === 'txt'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-neutral-100 dark:bg-neutral-950 text-neutral-600 dark:text-neutral-400'
+                    }`}
+                  >
+                    TXT格式
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-neutral-500 uppercase">直播源URL地址</label>
+                <input
+                  type="url"
+                  required
+                  placeholder="https://example.com/live.m3u 或 https://example.com/live.txt"
+                  value={liveSourceForm.url}
+                  onChange={e => setLiveSourceForm({ ...liveSourceForm, url: e.target.value })}
+                  className="w-full px-3 py-2.5 bg-neutral-100 dark:bg-neutral-950 border-0 rounded-xl text-xs sm:text-sm font-mono text-blue-600 dark:text-blue-400"
+                />
+                <p className="text-[10px] text-neutral-400 mt-1">支持M3U和TXT格式，支持IPV4和IPV6地址</p>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-neutral-500 uppercase">分组名称 (选填)</label>
+                <input
+                  type="text"
+                  placeholder="例如: 央视, 卫视, 地方"
+                  value={liveSourceForm.group}
+                  onChange={e => setLiveSourceForm({ ...liveSourceForm, group: e.target.value })}
+                  className="w-full px-3 py-2.5 bg-neutral-100 dark:bg-neutral-950 border-0 rounded-xl text-xs sm:text-sm text-neutral-900 dark:text-white"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-neutral-150 dark:border-neutral-800">
+                <button
+                  type="button"
+                  onClick={() => setLiveSourceModalOpen(false)}
+                  className="px-4 py-2 bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-750 text-neutral-600 dark:text-neutral-300 rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold cursor-pointer transition-colors"
+                >
+                  {editingLiveSource ? '保存修改' : '添加直播源'}
                 </button>
               </div>
             </form>

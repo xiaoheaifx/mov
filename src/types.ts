@@ -232,3 +232,21 @@ export interface VideoSourceSearchItem {
   sourceKey: string;
   sourceName: string;
 }
+
+export interface LiveChannel {
+  name: string;
+  group: string;
+  url: string;
+  logo: string;
+}
+
+export interface LiveSource {
+  id: string;
+  name: string;
+  type: 'm3u' | 'txt';
+  url: string;
+  group: string;
+  channels: LiveChannel[];
+  createdAt: string;
+  updatedAt: string;
+}
