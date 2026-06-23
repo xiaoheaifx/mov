@@ -20,12 +20,12 @@ function parseCookies(cookieHeader: string | undefined): Record<string, string> 
 
 // Session cookie helpers
 function setSessionCookie(name: string, token: string, maxAgeSec: number = 86400 * 30): string {
-  // Use SameSite=Lax for better compatibility, no Secure flag for localhost/HTTP support
-  return `${name}=${encodeURIComponent(token)}; HttpOnly; Path=/; Max-Age=${maxAgeSec}; SameSite=Lax`;
+  // Add Secure flag for HTTPS environments (Netlify), SameSite=Lax for compatibility
+  return `${name}=${encodeURIComponent(token)}; HttpOnly; Path=/; Max-Age=${maxAgeSec}; SameSite=Lax; Secure`;
 }
 
 function clearSessionCookie(name: string): string {
-  return `${name}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax`;
+  return `${name}=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax; Secure`;
 }
 
 // TMDB API helper
@@ -1272,6 +1272,11 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
           if (jsonMatch) {
             cleanText = jsonMatch[0];
           }
+          
+          // Remove JSONC-style comments (// and /* */) before parsing
+          // This handles TVBox configs that may contain comments
+          cleanText = cleanText.replace(/\/\/.*$/gm, '') // Remove single-line comments
+                               .replace(/\/\*[\s\S]*?\*\//g, ''); // Remove multi-line comments
           
           config = JSON.parse(cleanText);
         } catch (parseErr: any) {

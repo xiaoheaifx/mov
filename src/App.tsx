@@ -47,8 +47,10 @@ import MovieSection from './components/MovieSection.js';
 import TVBoxPanel from './components/TVBoxPanel.js';
 import TMDBDetailModal from './components/TMDBDetailModal.js';
 import TMDBDetailPage from './components/TMDBDetailPage.js';
+import SearchPage from './components/SearchPage.js';
+import VideoSourcePlayPage from './components/VideoSourcePlayPage.js';
 
-type PageRoute = 'home' | 'movie-detail' | 'detail' | 'viewer-login' | 'admin-login' | 'admin-dashboard' | 'tvbox-play' | 'movies' | 'tv' | 'anime' | 'variety' | 'live';
+type PageRoute = 'home' | 'movie-detail' | 'detail' | 'viewer-login' | 'admin-login' | 'admin-dashboard' | 'tvbox-play' | 'movies' | 'tv' | 'anime' | 'variety' | 'live' | 'search' | 'video-source-play';
 
 function TMDBDetailRoute({ tmdbId, getImageUrl, tmdbCache, onBack }: {
   tmdbId: string;
@@ -193,8 +195,6 @@ export default function App() {
   // Search, Filters & View Options
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState('全部');
-  const [showSearchModal, setShowSearchModal] = useState(false);
-  const [searchInputValue, setSearchInputValue] = useState('');
 
   // Interactive UI Modal States
   const [movieModalOpen, setMovieModalOpen] = useState(false);
@@ -233,9 +233,6 @@ export default function App() {
   const [tmdbPopularLoading, setTmdbPopularLoading] = useState(true);
   const [tmdbTvPopularLoading, setTmdbTvPopularLoading] = useState(true);
   const [tmdbTvTopRatedLoading, setTmdbTvTopRatedLoading] = useState(true);
-  const [tmdbSearchResults, setTmdbSearchResults] = useState<TMDBMovie[]>([]);
-  const [tmdbSearchLoading, setTmdbSearchLoading] = useState(false);
-  const [tmdbSearchQuery, setTmdbSearchQuery] = useState('');
   const [tmdbChineseMovies, setTmdbChineseMovies] = useState<TMDBMovie[]>([]);
   const [tmdbChineseMoviesLoading, setTmdbChineseMoviesLoading] = useState(true);
   const [tmdbChineseAnime, setTmdbChineseAnime] = useState<TMDBMovie[]>([]);
@@ -282,6 +279,21 @@ export default function App() {
   const [videoSourceForm, setVideoSourceForm] = useState({ name: '', key: '', api: '', detail: '' });
   const [editingVideoSource, setEditingVideoSource] = useState<VideoSource | null>(null);
   const [videoSourceModalOpen, setVideoSourceModalOpen] = useState(false);
+
+  // Video Source Playback States
+  const [videoSourcePlayData, setVideoSourcePlayData] = useState<{
+    sourceName: string;
+    vodName: string;
+    vodPic: string;
+    vodYear: string;
+    vodArea: string;
+    vodRemarks: string;
+    vodContent?: string;
+    vodDirector?: string;
+    vodActor?: string;
+    typeName?: string;
+    playLines: import('./types').VideoSourcePlayLine[];
+  } | null>(null);
 
   // Login mode toggle
   const [loginMode, setLoginMode] = useState<'viewer' | 'admin'>('viewer');
@@ -341,6 +353,10 @@ export default function App() {
         setCurrentRoute('variety');
       } else if (hash === '#/live') {
         setCurrentRoute('live');
+      } else if (hash === '#/search' || hash.startsWith('#/search?')) {
+        setCurrentRoute('search');
+      } else if (hash === '#/video-source/play') {
+        setCurrentRoute('video-source-play');
       } else if (hash === '#/tvbox/play') {
         setCurrentRoute('tvbox-play');
       } else if (hash.startsWith('#/detail/')) {
@@ -362,7 +378,7 @@ export default function App() {
   const fetchUserProfile = async () => {
     try {
       setAuthLoading(true);
-      const res = await fetch('/api/auth/me');
+      const res = await fetch('/api/auth/me', { credentials: 'include' });
       const data = await res.json();
       if (data.loggedIn && data.user) {
         setCurrentUser(data.user);
@@ -757,14 +773,14 @@ export default function App() {
 
   // Handle active admin tab changing
   useEffect(() => {
-    if (currentRoute === 'admin-dashboard' && currentUser) {
+    if (currentRoute === 'admin-dashboard' && currentUser && !authLoading) {
       // If streamer logged in, force tabs back to movies management (streamers can't manage users/streamers)
       if (currentUser.role === 'streamer') {
         setDashActiveTab('movies');
       }
       refreshDashboardData();
     }
-  }, [currentRoute, dashActiveTab, currentUser]);
+  }, [currentRoute, dashActiveTab, currentUser, authLoading]);
 
   const refreshDashboardData = async () => {
     if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'streamer')) return;
@@ -776,13 +792,13 @@ export default function App() {
       } else if (dashActiveTab === 'live-sources' && currentUser.role === 'admin') {
         await loadLiveSources();
       } else if (dashActiveTab === 'movies') {
-        const res = await fetch('/api/admin/movies');
+        const res = await fetch('/api/admin/movies', { credentials: 'include' });
         if (res.ok) setAdminMovies(await res.json());
       } else if (dashActiveTab === 'users' && currentUser.role === 'admin') {
-        const res = await fetch('/api/admin/users');
+        const res = await fetch('/api/admin/users', { credentials: 'include' });
         if (res.ok) setAdminUsers(await res.json());
       } else if (dashActiveTab === 'streamers' && currentUser.role === 'admin') {
-        const res = await fetch('/api/admin/streamers');
+        const res = await fetch('/api/admin/streamers', { credentials: 'include' });
         if (res.ok) setAdminStreamers(await res.json());
       }
     } catch (error) {
@@ -809,33 +825,6 @@ export default function App() {
     tmdbCacheRef.current[String(item.id)] = item;
     setDetailPageItem(item);
     window.location.hash = '#/detail/' + item.id;
-  };
-
-  // TMDB Search handler
-  const handleTmdbSearch = async (query: string) => {
-    setTmdbSearchLoading(true);
-    setTmdbSearchQuery(query);
-    try {
-      const res = await fetch(`/api/tmdb/search?query=${encodeURIComponent(query)}`);
-      if (res.ok) {
-        const data = await res.json();
-        // Filter results to only include movies and TV shows
-        const filteredResults = (data.results || [])
-          .filter((item: any) => item.media_type === 'movie' || item.media_type === 'tv' || item.title || item.name)
-          .map((item: any) => ({
-            ...item,
-            media_type: item.media_type || (item.first_air_date ? 'tv' : 'movie')
-          }));
-        setTmdbSearchResults(filteredResults);
-      } else {
-        setTmdbSearchResults([]);
-      }
-    } catch (e) {
-      console.error('Search failed:', e);
-      setTmdbSearchResults([]);
-    } finally {
-      setTmdbSearchLoading(false);
-    }
   };
 
   // Spectator login submission handler
@@ -892,7 +881,8 @@ export default function App() {
       const res = await fetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username, password }),
+        credentials: 'include'
       });
       const data = await res.json();
 
@@ -1001,7 +991,8 @@ export default function App() {
       const res = await fetch('/api/admin/check-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, movieId })
+        body: JSON.stringify({ url, movieId }),
+        credentials: 'include'
       });
       const data = await res.json();
       
@@ -1032,7 +1023,8 @@ export default function App() {
       const res = await fetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: newViewerName, password: newViewerPass })
+        body: JSON.stringify({ username: newViewerName, password: newViewerPass }),
+        credentials: 'include'
       });
       const data = await res.json();
 
@@ -1057,7 +1049,8 @@ export default function App() {
       const res = await fetch('/api/admin/users', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username })
+        body: JSON.stringify({ username }),
+        credentials: 'include'
       });
       const data = await res.json();
 
@@ -1084,7 +1077,8 @@ export default function App() {
       const res = await fetch('/api/admin/streamers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: newStreamerName, password: newStreamerPass })
+        body: JSON.stringify({ username: newStreamerName, password: newStreamerPass }),
+        credentials: 'include'
       });
       const data = await res.json();
 
@@ -1109,7 +1103,8 @@ export default function App() {
       const res = await fetch('/api/admin/streamers', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username })
+        body: JSON.stringify({ username }),
+        credentials: 'include'
       });
       const data = await res.json();
 
@@ -1182,7 +1177,7 @@ export default function App() {
           <nav className="flex items-center gap-3">
             {/* Search */}
             <button 
-              onClick={() => setShowSearchModal(true)}
+              onClick={() => navigateTo('#/search')}
               className="p-2 text-gray-400 hover:text-neutral-900 transition-colors"
             >
               <Search className="w-5 h-5" />
@@ -1579,6 +1574,32 @@ export default function App() {
             getImageUrl={getTmdbImageUrl}
             tmdbCache={tmdbCacheRef.current}
             onBack={() => { setDetailPageItem(null); navigateTo('#/'); }}
+          />
+        )}
+
+        {/* ====================================
+            VIEW: SEARCH PAGE
+            ==================================== */}
+        {currentRoute === 'search' && (
+          <SearchPage
+            onBack={() => navigateTo('#/')}
+            onPlayVideo={(result) => {
+              setVideoSourcePlayData({
+                sourceName: result.sourceName,
+                vodName: result.vodName,
+                vodPic: result.vodPic,
+                vodYear: result.vodYear,
+                vodArea: result.vodArea,
+                vodRemarks: result.vodRemarks,
+                vodContent: result.vodContent,
+                vodDirector: result.vodDirector,
+                vodActor: result.vodActor,
+                typeName: result.typeName,
+                playLines: result.playLines
+              });
+              navigateTo('#/video-source/play');
+            }}
+            getImageUrl={getTmdbImageUrl}
           />
         )}
 
@@ -2131,6 +2152,27 @@ export default function App() {
         )}
 
         {/* ====================================
+            VIEW: VIDEO SOURCE PLAY
+            ==================================== */}
+        {currentRoute === 'video-source-play' && videoSourcePlayData && (
+          <VideoSourcePlayPage
+            onBack={() => navigateTo('#/search')}
+            vodName={videoSourcePlayData.vodName}
+            vodPic={videoSourcePlayData.vodPic}
+            vodYear={videoSourcePlayData.vodYear}
+            vodArea={videoSourcePlayData.vodArea}
+            vodRemarks={videoSourcePlayData.vodRemarks}
+            vodContent={videoSourcePlayData.vodContent}
+            vodDirector={videoSourcePlayData.vodDirector}
+            vodActor={videoSourcePlayData.vodActor}
+            typeName={videoSourcePlayData.typeName}
+            playLines={videoSourcePlayData.playLines}
+            sourceName={videoSourcePlayData.sourceName}
+            getImageUrl={getTmdbImageUrl}
+          />
+        )}
+
+        {/* ====================================
             VIEW: BACKEND WORKER LOGIN
             ==================================== */}
         {currentRoute === 'admin-login' && (
@@ -2613,98 +2655,6 @@ export default function App() {
         )}
 
       </main>
-
-      {/* ==========================================================
-          SEARCH MODAL: TMDB Movie Search
-          ========================================================== */}
-      {showSearchModal && (
-        <div className="fixed inset-0 z-55 flex items-start justify-center bg-black/65 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-3xl w-full max-w-2xl p-6 space-y-5 text-left shadow-2xl animate-zoom-in my-8 max-h-[90vh] overflow-y-auto">
-            
-            <div className="flex items-center justify-between border-b border-neutral-150 dark:border-neutral-800 pb-3">
-              <h3 className="text-lg font-black dark:text-white tracking-tight">搜索影片</h3>
-              <button
-                onClick={() => {
-                  setShowSearchModal(false);
-                  setSearchInputValue('');
-                  setTmdbSearchResults([]);
-                }}
-                className="p-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-full cursor-pointer text-neutral-400 hover:text-rose-500 transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="输入影片名称、演员、导演..."
-                value={searchInputValue}
-                onChange={(e) => setSearchInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && searchInputValue.trim()) {
-                    handleTmdbSearch(searchInputValue.trim());
-                  }
-                }}
-                className="flex-1 px-4 py-2.5 bg-neutral-100 dark:bg-neutral-950 border-0 rounded-xl text-sm font-semibold text-neutral-900 dark:text-white placeholder-neutral-400"
-              />
-              <button
-                onClick={() => searchInputValue.trim() && handleTmdbSearch(searchInputValue.trim())}
-                disabled={tmdbSearchLoading}
-                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-300 text-white rounded-xl text-sm font-bold cursor-pointer transition-colors flex items-center gap-2"
-              >
-                {tmdbSearchLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                搜索
-              </button>
-            </div>
-
-            {tmdbSearchResults.length > 0 && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {tmdbSearchResults.map(item => (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      navigateTo(`#/detail/${item.id}`);
-                      setShowSearchModal(false);
-                      setSearchInputValue('');
-                      setTmdbSearchResults([]);
-                    }}
-                    className="group cursor-pointer text-left"
-                  >
-                    <div className="aspect-[2/3] rounded-xl overflow-hidden bg-neutral-100 dark:bg-neutral-800 mb-2">
-                      <img
-                        src={getTmdbImageUrl(item.poster_path, 'w300')}
-                        alt={item.title || item.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        loading="lazy"
-                      />
-                    </div>
-                    <p className="text-xs font-semibold text-neutral-900 dark:text-white truncate group-hover:text-blue-600 transition-colors">
-                      {item.title || item.name}
-                    </p>
-                    <p className="text-[10px] text-neutral-400">
-                      {item.release_date || item.first_air_date || '未知'}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {tmdbSearchLoading && (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
-                <span className="ml-2 text-sm text-neutral-500">搜索中...</span>
-              </div>
-            )}
-
-            {!tmdbSearchLoading && tmdbSearchResults.length === 0 && searchInputValue && (
-              <div className="text-center py-12 text-neutral-400">
-                <p className="text-sm">输入关键词开始搜索</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* ==========================================================
           MODAL COMPONENT: ADD/EDIT MOVIE DETAILS POPUP
